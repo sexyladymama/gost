@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build & test (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Test GhostKit (Swift Package)
+        run: swift test --package-path Packages/GhostKit
+
+      - name: Build GhostShell.app
+        run: |
+          xcodebuild build \
+            -project GhostShell.xcodeproj \
+            -scheme GhostShell \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build
+
+      - name: Test via the Xcode scheme
+        run: |
+          xcodebuild test \
+            -project GhostShell.xcodeproj \
+            -scheme GhostShell \
+            -destination 'platform=macOS' \
+            -derivedDataPath build
