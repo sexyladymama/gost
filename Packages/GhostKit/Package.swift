@@ -1,9 +1,13 @@
 // swift-tools-version: 5.9
 //
 // GhostKit — logique indépendante de l'interface de GHOST.
-// Ce package ne dépend d'aucune bibliothèque externe et ne contient
-// aucun code SwiftUI/AppKit : il est compilable et testable seul
-// (`swift test`), y compris hors de Xcode.
+//
+// - `GhostKit`        : états de GHOST et point d'extension du moteur (Mission 001).
+// - `GhostPerception` : moteur de perception — sources, normalisation,
+//                       compréhension, stockage, confiance (Mission 002).
+//
+// Aucune dépendance externe. Aucun code SwiftUI/AppKit : tout est
+// compilable et testable avec `swift test`, y compris hors de Xcode.
 
 import PackageDescription
 
@@ -13,10 +17,13 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .library(name: "GhostKit", targets: ["GhostKit"])
+        .library(name: "GhostKit", targets: ["GhostKit"]),
+        .library(name: "GhostPerception", targets: ["GhostPerception"])
     ],
     targets: [
         .target(name: "GhostKit"),
-        .testTarget(name: "GhostKitTests", dependencies: ["GhostKit"])
+        .target(name: "GhostPerception", dependencies: ["GhostKit"]),
+        .testTarget(name: "GhostKitTests", dependencies: ["GhostKit"]),
+        .testTarget(name: "GhostPerceptionTests", dependencies: ["GhostPerception"])
     ]
 )
