@@ -9,6 +9,7 @@ import Foundation
 public struct PerceptionSystem: Sendable {
     public static let gmailSourceID = SourceID("gmail")
     public static let folderSourceID = SourceID("folder")
+    public static let brainSourceID = SourceID("brain")
 
     public let profile: GhostProfile
     public let accessLog: AccessLog
@@ -24,7 +25,9 @@ public struct PerceptionSystem: Sendable {
         EgressRule(host: GmailMailProvider.apiHost, allowedPurposes: [gmailSourceID], requiredPermission: .readMail),
         // Échange/renouvellement/révocation de jeton : nécessaire pendant la
         // connexion, avant que l'autorisation ne soit enregistrée.
-        EgressRule(host: GoogleOAuthClient.tokenHost, allowedPurposes: [gmailSourceID], requiredPermission: nil)
+        EgressRule(host: GoogleOAuthClient.tokenHost, allowedPurposes: [gmailSourceID], requiredPermission: nil),
+        // Modèle externe du Brain : uniquement si l'utilisateur a accordé `callExternalModel`.
+        EgressRule(host: "api.anthropic.com", allowedPurposes: [brainSourceID], requiredPermission: .callExternalModel)
     ]
 
     public init(profile: GhostProfile, persistent: Bool = true, baseHTTP: HTTPClient = URLSessionHTTPClient(),

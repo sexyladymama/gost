@@ -5,6 +5,8 @@
 // - `GhostKit`        : états de GHOST et point d'extension du moteur (Mission 001).
 // - `GhostPerception` : moteur de perception — sources, normalisation,
 //                       compréhension, stockage, confiance (Mission 002).
+// - `GhostContext`    : mémoire contextuelle locale (Mission 003).
+// - `GhostBrain`      : cerveau décisionnel — objectifs, décisions, missions, plans (Mission 004).
 //
 // Aucune dépendance externe. Aucun code SwiftUI/AppKit : tout est
 // compilable et testable avec `swift test`, y compris hors de Xcode.
@@ -19,7 +21,8 @@ let package = Package(
     products: [
         .library(name: "GhostKit", targets: ["GhostKit"]),
         .library(name: "GhostPerception", targets: ["GhostPerception"]),
-        .library(name: "GhostContext", targets: ["GhostContext"])
+        .library(name: "GhostContext", targets: ["GhostContext"]),
+        .library(name: "GhostBrain", targets: ["GhostBrain"])
     ],
     targets: [
         .systemLibrary(name: "CSQLite", pkgConfig: "sqlite3"),
@@ -28,6 +31,8 @@ let package = Package(
         .testTarget(name: "GhostKitTests", dependencies: ["GhostKit"]),
         .testTarget(name: "GhostPerceptionTests", dependencies: ["GhostPerception"]),
         .target(name: "GhostContext", dependencies: ["GhostPerception", "CSQLite"]),
-        .testTarget(name: "GhostContextTests", dependencies: ["GhostContext"])
+        .testTarget(name: "GhostContextTests", dependencies: ["GhostContext"]),
+        .target(name: "GhostBrain", dependencies: ["GhostPerception", "GhostContext"]),
+        .testTarget(name: "GhostBrainTests", dependencies: ["GhostBrain", "GhostPerception", "GhostContext"])
     ]
 )

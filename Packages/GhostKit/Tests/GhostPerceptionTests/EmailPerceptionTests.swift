@@ -205,3 +205,15 @@ final class EmailPerceptionTests: XCTestCase {
         await engine.stop()
     }
 }
+
+/// Régression : les élisions françaises (« m'envoyer », « l'envoyer ») doivent être reconnues comme verbes d'action.
+final class ElisionRegressionTests: XCTestCase {
+    func testElidedPronounBeforeActionVerb() {
+        let event = interpret(email(subject: "Devis", body: "Peux-tu m'envoyer le devis client dès que possible ?"))
+        XCTAssertEqual(event.kind, .task)
+        XCTAssertTrue(event.expectedAction?.lowercased().contains("envoyer le devis") ?? false, event.expectedAction ?? "nil")
+        XCTAssertEqual(event.expectedOutput, "Devis")
+        let l = interpret(email(subject: "Rapport", body: "Merci de me l'envoyer avant vendredi."))
+        XCTAssertTrue(l.tags.contains(.task), "« l'envoyer » doit aussi être reconnu")
+    }
+}

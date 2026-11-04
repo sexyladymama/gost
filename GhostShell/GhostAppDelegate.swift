@@ -20,7 +20,7 @@ final class GhostAppDelegate: NSObject, NSApplicationDelegate {
 
     override init() {
         perception = PerceptionController()
-        stateManager = GhostStateManager(core: perception.center)
+        stateManager = GhostStateManager(core: perception.makeCore())
         super.init()
     }
 

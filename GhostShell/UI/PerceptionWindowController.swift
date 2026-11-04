@@ -15,7 +15,11 @@ final class PerceptionWindowController {
             controller.sizingOptions = [.minSize]
             let window = NSWindow(contentViewController: controller)
             window.title = "GHOST — Perception"
-            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.isMovableByWindowBackground = true
+            window.backgroundColor = GhostTheme.backgroundNS
             window.isReleasedWhenClosed = false
             window.setContentSize(NSSize(width: 980, height: 620))
             window.center()

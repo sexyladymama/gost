@@ -11,6 +11,7 @@ struct GhostDashboard: View {
 
     let stateManager: GhostStateManager
     let center: PerceptionCenter
+    @AppStorage(GhostAppearance.storageKey) private var appearanceRaw = GhostAppearance.dark.rawValue
 
     /// Ouvre la fenêtre GHOST Perception.
     let onOpenPerception: @MainActor () -> Void
@@ -19,28 +20,27 @@ struct GhostDashboard: View {
     let onQuit: @MainActor () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             header
-            statusRow
-            Divider()
-            perceptionSummary
-            Divider()
+            statusRow.padding(12).ghostGlass(cornerRadius: 14)
+            perceptionSummary.padding(12).ghostGlass(cornerRadius: 14)
             controls
         }
         .padding(16)
-        .frame(width: 300)
+        .frame(width: 320)
+        .background(GhostBackdrop())
+        .ghostAppearance(GhostAppearance(rawValue: appearanceRaw) ?? .dark)
     }
 
     // MARK: - Sous-vues
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("GHOST")
-                .font(.system(size: 22, weight: .bold, design: .monospaced))
-            Text("Shell \(Self.appVersion)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top) {
+            GhostWordmark(size: 26, subtitle: "shell v\(Self.appVersion)")
+            Spacer()
+            GhostAppearanceToggle()
         }
+        .padding(.bottom, 2)
     }
 
     private var statusRow: some View {
@@ -82,13 +82,17 @@ struct GhostDashboard: View {
                         Text(event.summary).font(.callout).lineLimit(2)
                         Spacer(minLength: 0)
                         if center.unseenImportant.contains(event.id) {
-                            Circle().fill(.blue).frame(width: 6, height: 6)
+                            Circle().fill(GhostTheme.accent).frame(width: 6, height: 6).shadow(color: GhostTheme.accent, radius: 3)
                         }
                     }
                 }
             }
-            Button("Voir ce que GHOST a détecté…", action: onOpenPerception)
-                .buttonStyle(.link)
+            Button(action: onOpenPerception) {
+                Text("Voir ce que GHOST a détecté…")
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(GhostTheme.accent)
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -98,19 +102,20 @@ struct GhostDashboard: View {
                 Label(toggleTitle, systemImage: toggleSymbol)
                     .frame(maxWidth: .infinity)
             }
-            .controlSize(.large)
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(GhostButtonStyle(prominent: true))
             .disabled(!stateManager.canTogglePause)
 
             Button(action: toggleRunning) {
                 Text(stateManager.state == .stopped ? "Démarrer la perception" : "Arrêter la perception")
                     .frame(maxWidth: .infinity)
             }
+            .buttonStyle(GhostButtonStyle())
 
             Button(role: .destructive, action: onQuit) {
                 Text("Quitter GHOST")
                     .frame(maxWidth: .infinity)
             }
+            .buttonStyle(GhostButtonStyle(destructive: true))
             .keyboardShortcut("q", modifiers: .command)
         }
     }

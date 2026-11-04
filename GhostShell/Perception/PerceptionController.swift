@@ -3,6 +3,7 @@ import Observation
 import GhostKit
 import GhostPerception
 import GhostContext
+import GhostBrain
 
 /// Configure et pilote les sources de perception depuis l'interface.
 ///
@@ -25,16 +26,22 @@ final class PerceptionController {
         static let clientID = "perception.gmail.clientID"
         static let account = "perception.gmail.account"
         static let folderBookmark = "perception.folder.bookmark"
+        static let externalModel = "brain.externalModel.enabled"
     }
 
     @ObservationIgnored let system: PerceptionSystem
     @ObservationIgnored let center: PerceptionCenter
     let context: ContextCenter
+    let brain: BrainCenter
+    @ObservationIgnored private let gateway: ModelGateway
 
     private(set) var emailMode: EmailMode
     private(set) var gmailAccount: String?
     private(set) var folderURL: URL?
     private(set) var isConnecting = false
+    /// Modèle externe : désactivé par défaut ; ne reçoit que des données masquées.
+    private(set) var externalModelEnabled = false
+    private(set) var hasModelKey = false
     var lastError: String?
     var googleClientID: String {
         didSet { defaults.set(googleClientID, forKey: Keys.clientID) }
@@ -55,6 +62,11 @@ final class PerceptionController {
         context = ContextCenter(engine: ContextEngine(profile: profile, trust: system.trust, persistent: persistent))
         defaults = persistent ? .standard : UserDefaults(suiteName: "ghost.preview") ?? .standard
         secrets = persistent ? KeychainSecretStore(profileID: profile.id) : InMemorySecretStore()
+        gateway = ModelGateway(providers: [AnthropicProvider(http: system.http, secrets: secrets)], policy: GatewayPolicy(enabled: false))
+        brain = BrainCenter(engine: BrainEngine(profile: profile, context: context.engine, trust: system.trust,
+                                                gateway: gateway, persistent: persistent))
+        externalModelEnabled = defaults.bool(forKey: Keys.externalModel)
+        hasModelKey = ((try? secrets.load(AnthropicProvider.secretKey)) ?? nil) != nil
         emailMode = EmailMode(rawValue: defaults.string(forKey: Keys.emailMode) ?? "") ?? .none
         googleClientID = defaults.string(forKey: Keys.clientID) ?? ""
         gmailAccount = defaults.string(forKey: Keys.account)
@@ -222,6 +234,13 @@ final class PerceptionController {
             try await center.attachConsumer(context.engine)
             await context.reload()
         } catch { await context.engine.report(error); await context.reload() }
+        // Le Brain démarre après le contexte : il analyse des événements déjà enrichis.
+        do {
+            try await brain.engine.reconcilePermissions()
+            await restoreModelSetting()
+            try await center.attachConsumer(brain.engine)
+        } catch { await brain.engine.report(error) }
+        await brain.reload()
     }
 
     func refreshContext() async {
@@ -238,6 +257,61 @@ final class PerceptionController {
         await context.reload()
     }
 
+    // MARK: - Cerveau
+
+    /// Cœur branché sur l'état de GHOST : en pause ou à l'arrêt, le Brain ne traite plus rien ;
+    /// à la reprise, il rattrape les événements non analysés (sans doublon).
+    func makeCore() -> GhostCoreInterface {
+        BrainAwareCore(base: center, onActive: { [weak self] active in
+            guard let self else { return }
+            Task {
+                await self.brain.engine.setActive(active)
+                if active { await self.catchUpBrain() }
+            }
+        })
+    }
+
+    func catchUpBrain() async {
+        do { try await center.replayEvents(to: brain.engine) }
+        catch { await brain.engine.report(error) }
+        await brain.reload()
+    }
+
+    private func restoreModelSetting() async {
+        let granted = await system.trust.isAuthorized(PerceptionSystem.brainSourceID, .callExternalModel)
+        let enabled = externalModelEnabled && granted && hasModelKey
+        externalModelEnabled = enabled
+        await gateway.setPolicy(GatewayPolicy(enabled: enabled))
+    }
+
+    /// Active ou coupe l'envoi de données **masquées** à un modèle externe (Anthropic).
+    func setExternalModel(enabled: Bool) async {
+        if enabled {
+            guard hasModelKey else { lastError = "Enregistrez d'abord une clé API."; return }
+            await system.trust.grant(PerceptionSystem.brainSourceID, permission: .callExternalModel, scope: "anthropic")
+        } else {
+            await system.trust.revoke(PerceptionSystem.brainSourceID)
+        }
+        externalModelEnabled = enabled
+        defaults.set(enabled, forKey: Keys.externalModel)
+        await gateway.setPolicy(GatewayPolicy(enabled: enabled))
+    }
+
+    func saveModelKey(_ key: String) {
+        let clean = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        do { try secrets.save(Data(clean.utf8), for: AnthropicProvider.secretKey); hasModelKey = true }
+        catch { lastError = Self.describe(error) }
+    }
+
+    func removeModelKey() async {
+        try? secrets.delete(AnthropicProvider.secretKey)
+        hasModelKey = false
+        await setExternalModel(enabled: false)
+    }
+
+    func modelCallCount() async -> Int { await gateway.callLog.count }
+
     func deleteCollectedData(includingAccessLog: Bool) async {
         lastError = nil
         do {
@@ -250,4 +324,21 @@ final class PerceptionController {
     static func describe(_ error: Error) -> String {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
+}
+
+
+/// Enveloppe `GhostCoreInterface` : relaie au moteur de perception et informe le Brain des changements d'état.
+@MainActor
+final class BrainAwareCore: GhostCoreInterface {
+    private let base: GhostCoreInterface
+    private let onActive: (Bool) -> Void
+    var name: String { base.name + " + Brain" }
+
+    init(base: GhostCoreInterface, onActive: @escaping (Bool) -> Void) {
+        self.base = base; self.onActive = onActive
+    }
+    func start() { base.start(); onActive(true) }
+    func pause() { onActive(false); base.pause() }
+    func resume() { base.resume(); onActive(true) }
+    func stop() { onActive(false); base.stop() }
 }

@@ -6,11 +6,12 @@ import GhostPerception
 /// et le contrôle complet des sources et des données.
 struct PerceptionWindow: View {
     enum Section: String, CaseIterable, Identifiable {
-        case events, memory, issues, sources, accessLog, privacy
+        case missions, events, memory, issues, sources, accessLog, privacy
         var id: String { rawValue }
         var title: String {
             switch self {
             case .events: return "Événements"
+            case .missions: return "Missions"
             case .memory: return "Mémoire"
             case .issues: return "Anomalies"
             case .sources: return "Sources"
@@ -21,6 +22,7 @@ struct PerceptionWindow: View {
         var symbol: String {
             switch self {
             case .events: return "tray.full"
+            case .missions: return "scope"
             case .memory: return "brain"
             case .issues: return "exclamationmark.triangle"
             case .sources: return "antenna.radiowaves.left.and.right"
@@ -32,7 +34,8 @@ struct PerceptionWindow: View {
 
     let stateManager: GhostStateManager
     let perception: PerceptionController
-    @State private var section: Section? = .events
+    @State private var section: Section? = .missions
+    @AppStorage(GhostAppearance.storageKey) private var appearanceRaw = GhostAppearance.dark.rawValue
 
     var body: some View {
         NavigationSplitView {
@@ -43,10 +46,17 @@ struct PerceptionWindow: View {
                         .tag(item)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210)
+            .scrollContentBackground(.hidden)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                GhostWordmark(size: 24, subtitle: "perception · mémoire · cerveau")
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         } detail: {
-            switch section ?? .events {
+            switch section ?? .missions {
             case .events: EventsView(center: perception.center)
+            case .missions: MissionsView(perception: perception)
             case .memory: ContextView(perception: perception)
             case .issues: IssuesView(center: perception.center)
             case .sources: SourcesView(perception: perception)
@@ -58,6 +68,7 @@ struct PerceptionWindow: View {
             ToolbarItem(placement: .navigation) {
                 GhostActivityIndicator(state: stateManager.state, engineState: perception.center.engineState)
             }
+            ToolbarItem { GhostAppearanceToggle() }
             ToolbarItem {
                 Button {
                     perception.center.refreshNow()
@@ -69,10 +80,14 @@ struct PerceptionWindow: View {
             }
         }
         .frame(minWidth: 820, minHeight: 520)
+        .scrollContentBackground(.hidden)
+        .background(GhostBackdrop())
+        .ghostAppearance(GhostAppearance(rawValue: appearanceRaw) ?? .dark)
     }
 
     private func badge(for item: Section) -> Int {
         switch item {
+        case .missions: return perception.brain.missions.filter { [.proposed, .needsClarification].contains($0.state) }.count
         case .events: return perception.center.unseenImportant.count
         case .issues: return perception.center.issues.count
         default: return 0

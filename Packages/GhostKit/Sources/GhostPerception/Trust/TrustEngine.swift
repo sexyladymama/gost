@@ -6,6 +6,8 @@ public enum Permission: String, Codable, Sendable {
     case readMail
     /// Observer les métadonnées des fichiers d'un dossier choisi (lecture seule).
     case watchFolder
+    /// Envoyer des données **masquées** à un modèle externe (GHOST BRAIN). Désactivée par défaut.
+    case callExternalModel
 }
 
 /// Autorisation accordée par l'utilisateur.

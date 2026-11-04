@@ -35,8 +35,14 @@ public actor ContextEngine: PerceptionEventConsumer {
             try await trust.require(event.source.id, permission, operation: "context.ingest", target: event.source.displayName)
             permitted.append(event)
         }
+        // Rejeu idempotent : si tous les événements sont déjà connus, rien n'est écrit.
+        let known = try snapshot()
+        let fresh = permitted.filter {
+            !ContextInference.knows($0, scope: known.scopes[$0.source.id.rawValue] ?? .unclassified, graph: known)
+        }
+        guard !fresh.isEmpty else { return }
         try mutate { graph in
-            for event in permitted {
+            for event in fresh {
                 let scope = graph.scopes[event.source.id.rawValue] ?? .unclassified
                 ContextInference.ingest(event, scope: scope, graph: &graph)
             }

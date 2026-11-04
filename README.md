@@ -18,6 +18,7 @@ e-mail, ne modifie ni ne supprime aucun fichier et n'exécute aucune tâche.
 - [Audit Mission 001 du 4 novembre 2026](docs/MISSION_001_AUDIT.md) : résultats techniques et vérifications restantes.
 - [Mission 002.1](docs/MISSION_002_1.md) : corrections de stockage, reprise après panne et validation.
 - [GHOST CONTEXT (Mission 003)](docs/CONTEXT.md) : mémoire et compréhension contextuelle, cloisonnement, preuves, corrections.
+- [GHOST BRAIN (Mission 004)](docs/BRAIN.md) : décisions, missions, priorités, plans ; [évaluation chiffrée](docs/BRAIN_EVALUATION.md).
 
 ## Fonctionnalités
 
@@ -35,6 +36,7 @@ e-mail, ne modifie ni ne supprime aucun fichier et n'exécute aucune tâche.
 - *Anomalies* : erreurs de connexion, d'autorisation ou d'accès ;
 - *Sources* : activer/désactiver, connecter, **révoquer** chaque source ;
 - *Journal d'accès* : chaque accès à une source (autorisé, refusé, échec) ;
+- *Missions* : ce que GHOST a décidé de suivre, pourquoi, avec priorité, plan, manques, autorisations, preuves et historique ; il **propose, vous décidez** (rien n'est exécuté) ;
 - *Mémoire* : ce que GHOST comprend (projets, personnes, documents, demandes, échéances), statut confirmé / hypothèse / inconnu, preuves, corrections ;
 - *Confidentialité* : garanties, arrêt complet, **suppression des données collectées et de la mémoire**.
 
@@ -83,7 +85,7 @@ swift test --package-path Packages/GhostKit
 
 ou, dans Xcode, `Product ▸ Test` (⌘U) avec le schéma **GhostShell**.
 
-Les tests (110) couvrent la logique d'état de la Mission 001 et les exigences
+Les tests (163) couvrent la logique d'état de la Mission 001 et les exigences
 de la Mission 002 (préfixes `testR01_` à `testR10_`) :
 
 | # | Exigence | Tests |
@@ -125,10 +127,13 @@ gost/
 │   ├── Sources/GhostKit/             États de GHOST, GhostCoreInterface (Mission 001)
 │   ├── Sources/GhostPerception/      Moteur de perception (Mission 002)
 │   ├── Sources/GhostContext/         Mémoire contextuelle, SQLite local (Mission 003)
+│   ├── Sources/GhostBrain/           Cerveau décisionnel : objectifs, décisions, missions, plans (Mission 004)
 │   └── Tests/                        Tests XCTest
 └── docs/
     ├── PERCEPTION.md                 Documentation technique du moteur
     ├── CONTEXT.md                    Mémoire et compréhension contextuelle
+    ├── BRAIN.md                      Cerveau décisionnel et missions
+    ├── BRAIN_EVALUATION.md           Évaluation chiffrée (générée par les tests)
     └── GMAIL_SETUP.md                Connexion d'une boîte Gmail de test
 ```
 

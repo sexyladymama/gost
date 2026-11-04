@@ -5,8 +5,11 @@ import CSQLite
 final class ContextDatabase {
     private var handle: OpaquePointer?
     private let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-    private let encoder = JSONEncoder()
+    private let encoder: JSONEncoder = { let e = JSONEncoder(); e.outputFormatting = [.sortedKeys]; return e }()
     private let decoder = JSONDecoder()
+    /// Dernières charges utiles écrites : seules les lignes modifiées sont réécrites.
+    private var savedNodes: [String: Data] = [:]
+    private var savedRelations: [String: Data] = [:]
 
     init(url: URL?, profileID: String) throws {
         if let url { try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true) }
@@ -52,6 +55,7 @@ final class ContextDatabase {
         do {
             for data in try blobs("SELECT payload FROM nodes") {
                 let node = try decoder.decode(ContextNode.self, from: data); snapshot.nodes[node.id] = node
+                savedNodes[node.id] = try encoder.encode(node)
             }
             for data in try blobs("SELECT payload FROM relations") {
                 let edge = try decoder.decode(ContextRelation.self, from: data)
@@ -59,27 +63,50 @@ final class ContextDatabase {
                     throw ContextError.storage("Relation sans entité ; données conservées.")
                 }
                 snapshot.relations[edge.id] = edge
+                savedRelations[edge.id] = try encoder.encode(edge)
             }
         } catch { throw ContextError.storage("Graphe illisible ; aucune reconstruction destructive n'a été effectuée.") }
         return snapshot
     }
 
     func save(_ snapshot: ContextSnapshot) throws {
+        // Encodage déterministe : une ligne n'est réécrite que si sa charge utile a changé.
+        var nodePayloads: [String: Data] = [:], relationPayloads: [String: Data] = [:]
+        for (id, node) in snapshot.nodes { nodePayloads[id] = try encoder.encode(node) }
+        for (id, edge) in snapshot.relations { relationPayloads[id] = try encoder.encode(edge) }
+        var state = snapshot; state.nodes = [:]; state.relations = [:]
+        let stateData = try encoder.encode(state)
+
         try execute("BEGIN IMMEDIATE")
         do {
-            try execute("DELETE FROM relations")
-            try execute("DELETE FROM nodes")
-            for node in snapshot.nodes.values {
+            // Relations d'abord (clés étrangères).
+            for id in savedRelations.keys where relationPayloads[id] == nil {
+                try execute("DELETE FROM relations WHERE id=?", values: [Data(id.utf8)])
+            }
+            for id in savedNodes.keys where nodePayloads[id] == nil {
+                try execute("DELETE FROM nodes WHERE id=?", values: [Data(id.utf8)])
+            }
+            for (id, payload) in nodePayloads where savedNodes[id] != payload {
+                guard let node = snapshot.nodes[id] else { continue }
                 let search = ContextText.normalized(node.title + " " + node.properties.values.joined(separator: " "))
-                try execute("INSERT INTO nodes VALUES(?,?,?,?,?,?)", values: [node.id, node.kind.rawValue, node.scope.rawValue, node.domain.rawValue, search].map { Data($0.utf8) } + [try encoder.encode(node)])
+                try execute("""
+                    INSERT INTO nodes(id,kind,scope,domain,search_text,payload) VALUES(?,?,?,?,?,?)
+                    ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, scope=excluded.scope, domain=excluded.domain,
+                    search_text=excluded.search_text, payload=excluded.payload
+                    """, values: [id, node.kind.rawValue, node.scope.rawValue, node.domain.rawValue, search].map { Data($0.utf8) } + [payload])
             }
-            for edge in snapshot.relations.values {
-                try execute("INSERT INTO relations VALUES(?,?,?,?)", values: [edge.id, edge.from, edge.to].map { Data($0.utf8) } + [try encoder.encode(edge)])
+            for (id, payload) in relationPayloads where savedRelations[id] != payload {
+                guard let edge = snapshot.relations[id] else { continue }
+                try execute("""
+                    INSERT INTO relations(id,from_id,to_id,payload) VALUES(?,?,?,?)
+                    ON CONFLICT(id) DO UPDATE SET from_id=excluded.from_id, to_id=excluded.to_id, payload=excluded.payload
+                    """, values: [id, edge.from, edge.to].map { Data($0.utf8) } + [payload])
             }
-            var state = snapshot; state.nodes = [:]; state.relations = [:]
-            try execute("INSERT OR REPLACE INTO metadata(key,value) VALUES('state',?)", values: [try encoder.encode(state)])
+            try execute("INSERT OR REPLACE INTO metadata(key,value) VALUES('state',?)", values: [stateData])
             try execute("COMMIT")
         } catch { try? execute("ROLLBACK"); throw error }
+        savedNodes = nodePayloads
+        savedRelations = relationPayloads
     }
 
     func search(_ query: String, domain: MemoryDomain?, scope: ContextScope?) throws -> [String] {

@@ -10,6 +10,12 @@ enum ContextInference {
     static func nodeID(_ kind: ContextEntityKind, key: String, namespace: String, graph: ContextSnapshot) -> String {
         ContextText.id(graph.salt + "|" + namespace + "|" + kind.rawValue + "|" + key)
     }
+    /// `true` si cet événement a déjà été intégré (ou supprimé volontairement) dans ce graphe.
+    static func knows(_ event: GhostEvent, scope: ContextScope, graph: ContextSnapshot) -> Bool {
+        let ns = namespace(scope: scope, source: event.source.id, simulated: event.source.isSimulated)
+        let id = nodeID(.event, key: event.source.id.rawValue + "|" + event.fingerprint, namespace: ns, graph: graph)
+        return graph.nodes[id] != nil || graph.suppressedNodes.contains(id)
+    }
     @discardableResult
     static func node(_ kind: ContextEntityKind, key: String, title: String, namespace: String,
                      scope: ContextScope, simulated: Bool, status: KnowledgeStatus, confidence: Double,

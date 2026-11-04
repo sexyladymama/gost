@@ -22,6 +22,7 @@ struct PrivacyView: View {
                 guarantee("folder.badge.questionmark", "Dossier : métadonnées uniquement, dans le seul dossier choisi. Aucune lecture de contenu, modification ou suppression.")
                 guarantee("network.slash", "Aucune donnée n'est envoyée à un service tiers. Seules les API Google nécessaires à Gmail sont joignables, et uniquement si vous avez connecté Gmail.")
                 guarantee("rectangle.dashed.badge.record", "Aucune capture d'écran, aucune frappe clavier, aucune observation de vos applications.")
+                guarantee("scope", "Le cerveau propose des missions mais n'exécute rien : aucun envoi, aucune modification de fichier, aucune action sans votre validation.")
                 guarantee("key", "Les jetons Google sont stockés dans le Trousseau macOS.")
                 guarantee("list.bullet.rectangle", "Chaque accès à une source est inscrit dans le journal d'accès.")
             }
@@ -41,12 +42,12 @@ struct PrivacyView: View {
                     Text(perception.system.profile.directory.path)
                         .textSelection(.enabled).lineLimit(2).truncationMode(.middle)
                 }
-                Button("Supprimer les données et la mémoire…", role: .destructive) { confirmDeletion = true }
+                Button("Supprimer les données, la mémoire et les missions…", role: .destructive) { confirmDeletion = true }
             }
         }
         .formStyle(.grouped)
         .confirmationDialog("Supprimer les données et la mémoire ?", isPresented: $confirmDeletion) {
-            Button("Supprimer les événements et la mémoire", role: .destructive) {
+            Button("Supprimer événements, mémoire et missions", role: .destructive) {
                 Task { await perception.deleteCollectedData(includingAccessLog: false) }
             }
             Button("Supprimer événements, mémoire et journal", role: .destructive) {

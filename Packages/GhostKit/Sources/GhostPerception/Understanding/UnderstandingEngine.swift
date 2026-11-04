@@ -35,11 +35,17 @@ public struct UnderstandingEngine: Sendable {
     static let requestMarker = Pattern(#"\b(peux-tu|peux tu|pourrais-tu|pourrais tu|pouvez-vous|pouvez vous|pourriez-vous|pourriez vous|tu peux|tu pourrais|vous pouvez|vous pourriez|merci de (?!ta |ton |tes |votre |vos |ce |cette |l'|la )|je te demande|je vous demande|j'aurais besoin|j'ai besoin|il faudrait|il faut que (?:tu|vous)|n'oublie pas|n'oubliez pas|serait-il possible|serait il possible|est-ce que tu|est-ce que vous|je compte sur (?:toi|vous)|can you|could you|would you|will you|please|i need you to|would it be possible|don't forget to|make sure to|let me know)\b"#)
     static let politeness = Pattern(#"\b(stp|svp|s'il te pla[iî]t|s'il vous pla[iî]t)\b"#)
     static let secondPerson = Pattern(#"\b(tu|toi|vous|you|your|t'|te)\b|-tu\b|-vous\b"#)
-    static let actionVerb = Pattern(#"\b(pr[ée]parer|pr[ée]pare|pr[ée]parez|envoyer|envoie|envoyez|renvoyer|renvoie|transmettre|transmets|transmettez|r[ée]diger|r[ée]dige|r[ée]digez|[ée]crire|cr[ée]er|cr[ée]e|mettre à jour|mets à jour|compl[ée]ter|compl[èe]te|remplir|remplis|relire|relis|v[ée]rifier|v[ée]rifie|valider|valide|corriger|corrige|finaliser|finalise|analyser|analyse|compiler|organiser|organise|r[ée]server|r[ée]serve|appeler|appelle|rappeler|partager|partage|signer|signe|imprimer|imprime|r[ée]pondre|r[ée]ponds|regarder|jeter un (?:œil|oeil|coup d'œil|coup d'oeil)|prepare|send|write|draft|create|update|review|fill (?:out|in)|complete|finalize|share|schedule|book|call|check|fix|sign|print|compile|put together)\b"#)
+    // Délimiteurs par lookaround et non `\b` : « m'envoyer », « l'envoyer » (élisions) doivent être reconnus.
+    static let actionVerb = Pattern(#"(?<![\p{L}\p{N}])(pr[ée]parer|pr[ée]pare|pr[ée]parez|envoyer|envoie|envoyez|renvoyer|renvoie|transmettre|transmets|transmettez|r[ée]diger|r[ée]dige|r[ée]digez|[ée]crire|cr[ée]er|cr[ée]e|mettre à jour|mets à jour|compl[ée]ter|compl[èe]te|remplir|remplis|relire|relis|v[ée]rifier|v[ée]rifie|valider|valide|corriger|corrige|finaliser|finalise|analyser|analyse|compiler|organiser|organise|r[ée]server|r[ée]serve|appeler|appelle|rappeler|partager|partage|signer|signe|imprimer|imprime|r[ée]pondre|r[ée]ponds|regarder|jeter un (?:œil|oeil|coup d'œil|coup d'oeil)|prepare|send|write|draft|create|update|review|fill (?:out|in)|complete|finalize|share|schedule|book|call|check|fix|sign|print|compile|put together)(?![\p{L}\p{N}])"#)
     static let followUp = Pattern(#"\b(relance|relancer|je me permets de revenir|je reviens vers (?:toi|vous)|as-tu pu|avez-vous pu|as-tu eu le temps|avez-vous eu le temps|toujours en attente|j'attends toujours|sans nouvelles|petit rappel|following up|follow up|any update|gentle reminder|just checking in|did you get a chance|still waiting)\b"#)
     static let followUpSubject = Pattern(#"^\s*(relance|rappel|reminder|follow[- ]?up)\b"#)
     static let informational = Pattern(#"\b(pour info|pour information|pour ton information|pour votre information|fyi|à titre informatif|a titre informatif|newsletter|no action (?:is )?required|aucune action|ne pas r[ée]pondre|do not reply|unsubscribe|d[ée]sabonner|d[ée]sinscrire)\b"#)
     static let conversational = Pattern(#"^\s*(merci|thanks|thank you|super|parfait|top|génial|genial|ok|d'accord|bien reçu|bien recu|reçu|avec plaisir)\b"#)
+    // Marqueurs de changement : n'alterent pas la classification, mais laissent une preuve
+    // exploitable par les moteurs en aval (le corps du message n'est pas conservé).
+    static let cancellation = Pattern(#"\b(annul(?:e|é|ée|er|ation)|plus besoin|finalement pas|laisse tomber|oublie ma demande|n'est plus nécessaire|inutile de|no longer needed|cancel(?:l?ed)?|never mind|disregard|ignore my previous)\b"#)
+    static let acknowledgement = Pattern(#"\b(bien reçu|bien recu|merci pour (?:le fichier|l'envoi)|c'est parfait|parfait,? merci|received the file|thanks for sending|got it,? thanks)\b"#)
+    static let deadlineChange = Pattern(#"\b(décalé(?:e)?|reporté(?:e)?|repoussé(?:e)?|finalement pour|nouvelle (?:échéance|date)|changement d'échéance|au lieu de|postponed|rescheduled|moved to|now due|pushed back|délai prolongé)\b"#)
     static let attachment = Pattern(#"\b(pi[eè]ce jointe|ci-joint|en pj|attached|attachment)\b"#)
     static let requiredInfo = Pattern(#"\b(?:avec|contenant|incluant|comprenant|reprenant|concernant|including|with)\s+((?:les|le|la|l'|des|du|nos|vos|tes|mes|ses|leurs|the|our|your|all)\b[^,;!?]*)"#)
     static let clauseCut = Pattern(#"\s+(pour|afin|d'ici|avant|by|before|for|stp|svp|merci)\b"#)
@@ -156,6 +162,16 @@ public struct UnderstandingEngine: Sendable {
             score += 0.15
             evidence.append(Evidence(rule: "follow-up.marker", explanation: "Formule de relance « \(marker.text) »"))
             if expectedAction == nil { expectedAction = "Donner suite à la relance" }
+        }
+
+        // 5 bis. Annulation, accusé de réception, changement d'échéance (preuves seulement).
+        for (pattern, rule, label) in [(Self.cancellation, "change.cancellation", "Formule d'annulation"),
+                                       (Self.acknowledgement, "change.acknowledgement", "Accusé de réception"),
+                                       (Self.deadlineChange, "change.deadline", "Changement d'échéance")] {
+            if let marker = pattern.firstMatch(in: obs.text), !obs.isAutomated {
+                let sentence = sentences.first { pattern.contains($0) } ?? marker.text
+                evidence.append(Evidence(rule: rule, explanation: "\(label) « \(marker.text) »", excerpt: TextTools.excerpt(sentence)))
+            }
         }
 
         // 6. Indices informatifs et automatisés.
