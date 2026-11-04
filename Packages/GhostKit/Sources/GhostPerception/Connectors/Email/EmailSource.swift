@@ -20,6 +20,7 @@ public actor EmailSource: PerceptionSource {
     private let stateStore: SourceStateStore
     private let startDate: Date
     private var state: State?
+    private var pending: (observations: [RawObservation], state: State)?
     private var account: String?
     private let maxSeen = 500
 
@@ -39,8 +40,15 @@ public actor EmailSource: PerceptionSource {
     private var stateKey: String { "email.\(descriptor.id.rawValue).\(descriptor.isSimulated ? "simulation" : "live")" }
 
     public func poll() async throws -> [RawObservation] {
+        let observations = try await collect()
+        try await acknowledge()
+        return observations
+    }
+
+    public func collect() async throws -> [RawObservation] {
         try await trust.require(descriptor.id, .readMail, operation: "mail.fetch", target: provider.displayName)
-        var current = loadState()
+        if let pending { return pending.observations }
+        var current = try loadState()
         if account == nil { account = try await provider.accountAddress() }
         let messages = try await provider.fetchMessages(after: current.cursor)
         let seen = Set(current.seenIDs)
@@ -48,27 +56,39 @@ public actor EmailSource: PerceptionSource {
         current.seenIDs.append(contentsOf: fresh.map(\.id))
         current.seenIDs = Array(current.seenIDs.suffix(maxSeen))
         if let latest = messages.map(\.date).max(), latest > current.cursor { current.cursor = latest }
-        state = current
-        if let data = try? JSONEncoder().encode(current) { stateStore.save(data, for: stateKey) }
-        return fresh.map { RawObservation.email($0, account: account) }
+        let observations = fresh.map { RawObservation.email($0, account: account) }
+        pending = (observations, current)
+        return observations
+    }
+
+    public func acknowledge() async throws {
+        guard let pending else { return }
+        try stateStore.save(JSONEncoder().encode(pending.state), for: stateKey)
+        state = pending.state
+        self.pending = nil
     }
 
     public func revokeAccess() async throws {
         try await provider.revokeAccess()
     }
 
-    public func resetState() async {
+    public func resetState() async throws {
         // Après suppression des données, on repart de maintenant : les
         // anciens messages ne sont pas re-collectés.
-        let now = max(Date(), loadState().cursor)
-        state = State(cursor: now, seenIDs: [])
-        if let data = try? JSONEncoder().encode(state) { stateStore.save(data, for: stateKey) }
+        // L'effacement explicite doit aussi fonctionner si le curseur sur
+        // disque est corrompu ; la lecture normale, elle, le préserve et échoue.
+        let now = max(Date(), state?.cursor ?? startDate)
+        let candidate = State(cursor: now, seenIDs: [])
+        try stateStore.save(JSONEncoder().encode(candidate), for: stateKey)
+        state = candidate
+        pending = nil
     }
 
-    private func loadState() -> State {
+    private func loadState() throws -> State {
         if let state { return state }
-        if let data = stateStore.load(stateKey), let saved = try? JSONDecoder().decode(State.self, from: data) {
-            return saved
+        if let data = try stateStore.load(stateKey) {
+            do { return try JSONDecoder().decode(State.self, from: data) }
+            catch { throw PerceptionError.storageFailed("Le curseur e-mail est illisible et a été conservé.") }
         }
         return State(cursor: startDate, seenIDs: [])
     }

@@ -83,6 +83,24 @@ final class GhostStateManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testStartWhenPausedThrowsWithoutRestartingCore() async throws {
+        let (manager, core) = makeSUT()
+        try manager.start()
+        try manager.pause()
+
+        XCTAssertThrowsError(try manager.start()) { error in
+            XCTAssertEqual(error as? GhostTransitionError,
+                           .invalidTransition(from: .paused, to: .active))
+        }
+        XCTAssertEqual(manager.state, .paused)
+        XCTAssertEqual(core.calls, [.start, .pause])
+
+        try manager.resume()
+        XCTAssertEqual(manager.state, .active)
+        XCTAssertEqual(core.calls, [.start, .pause, .resume])
+    }
+
+    @MainActor
     func testPauseWhenNotActiveThrows() async {
         let (manager, _) = makeSUT()
         XCTAssertThrowsError(try manager.pause())

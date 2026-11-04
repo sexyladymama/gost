@@ -86,21 +86,21 @@ struct SourcesView: View {
         }
         .formStyle(.grouped)
         .confirmationDialog("Révoquer l'accès e-mail ?", isPresented: $confirmEmailRevocation) {
-            Button("Révoquer et supprimer les événements e-mail", role: .destructive) {
+            Button("Révoquer et supprimer les événements et leur mémoire", role: .destructive) {
                 Task { await perception.removeEmailSource(deleteData: true) }
             }
-            Button("Révoquer, conserver les événements") {
-                Task { await perception.removeEmailSource(deleteData: false) }
+            Button("Révoquer, conserver événements et mémoire") {
+                Task { await perception.removeEmailSource(deleteData: false, retainContext: true) }
             }
         } message: {
             Text("GHOST cessera immédiatement de lire cette boîte. Pour Gmail, le jeton est révoqué auprès de Google et effacé du Trousseau.")
         }
         .confirmationDialog("Révoquer l'accès au dossier ?", isPresented: $confirmFolderRevocation) {
-            Button("Révoquer et supprimer les événements du dossier", role: .destructive) {
+            Button("Révoquer et supprimer les événements et leur mémoire", role: .destructive) {
                 Task { await perception.removeFolderSource(deleteData: true) }
             }
-            Button("Révoquer, conserver les événements") {
-                Task { await perception.removeFolderSource(deleteData: false) }
+            Button("Révoquer, conserver événements et mémoire") {
+                Task { await perception.removeFolderSource(deleteData: false, retainContext: true) }
             }
         }
     }

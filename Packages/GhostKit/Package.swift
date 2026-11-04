@@ -18,12 +18,16 @@ let package = Package(
     ],
     products: [
         .library(name: "GhostKit", targets: ["GhostKit"]),
-        .library(name: "GhostPerception", targets: ["GhostPerception"])
+        .library(name: "GhostPerception", targets: ["GhostPerception"]),
+        .library(name: "GhostContext", targets: ["GhostContext"])
     ],
     targets: [
+        .systemLibrary(name: "CSQLite", pkgConfig: "sqlite3"),
         .target(name: "GhostKit"),
         .target(name: "GhostPerception", dependencies: ["GhostKit"]),
         .testTarget(name: "GhostKitTests", dependencies: ["GhostKit"]),
-        .testTarget(name: "GhostPerceptionTests", dependencies: ["GhostPerception"])
+        .testTarget(name: "GhostPerceptionTests", dependencies: ["GhostPerception"]),
+        .target(name: "GhostContext", dependencies: ["GhostPerception", "CSQLite"]),
+        .testTarget(name: "GhostContextTests", dependencies: ["GhostContext"])
     ]
 )

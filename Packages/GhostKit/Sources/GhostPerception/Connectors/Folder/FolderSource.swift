@@ -27,6 +27,7 @@ public actor FolderSource: PerceptionSource {
     private let maxDepth: Int
     private let maxEntries: Int
     private var snapshot: [String: Entry]?
+    private var pending: (observations: [RawObservation], snapshot: [String: Entry])?
 
     public init(id: SourceID = SourceID("folder"), root: URL, trust: TrustEngine,
                 stateStore: SourceStateStore, fileSystem: FileSystemReader = LocalFileSystem(),
@@ -45,7 +46,14 @@ public actor FolderSource: PerceptionSource {
     private var stateKey: String { "folder.\(descriptor.id.rawValue).\(StableHash.fnv1a(root.standardizedFileURL.path))" }
 
     public func poll() async throws -> [RawObservation] {
+        let observations = try await collect()
+        try await acknowledge()
+        return observations
+    }
+
+    public func collect() async throws -> [RawObservation] {
         let authorizedRoot = try await trust.requireFolderAccess(root, for: descriptor.id)
+        if let pending { return pending.observations }
         var current: [String: Entry] = [:]
         var metadata: [String: FileMetadata] = [:]
         do {
@@ -56,10 +64,10 @@ public actor FolderSource: PerceptionSource {
             throw PerceptionError.connectionFailed("dossier inaccessible (\(error.localizedDescription))")
         }
 
-        let previous = loadSnapshot()
-        snapshot = current
-        if let data = try? JSONEncoder().encode(current) { stateStore.save(data, for: stateKey) }
-        guard let previous else { return [] } // premier parcours : référence
+        guard let previous = try loadSnapshot() else {
+            pending = ([], current)
+            return [] // premier parcours : référence, à valider après stockage
+        }
 
         var changes: [FileChange] = []
         for (path, entry) in current.sorted(by: { $0.key < $1.key }) {
@@ -79,14 +87,24 @@ public actor FolderSource: PerceptionSource {
                 name: name, fileExtension: ext, category: .from(extension: ext),
                 size: old.size, modifiedAt: old.modifiedAt, createdAt: old.createdAt)))
         }
-        return changes.map(RawObservation.file)
+        let observations = changes.map(RawObservation.file)
+        pending = (observations, current)
+        return observations
+    }
+
+    public func acknowledge() async throws {
+        guard let pending else { return }
+        try stateStore.save(JSONEncoder().encode(pending.snapshot), for: stateKey)
+        snapshot = pending.snapshot
+        self.pending = nil
     }
 
     public func revokeAccess() async throws {}
 
-    public func resetState() async {
+    public func resetState() async throws {
+        try stateStore.remove(stateKey)
         snapshot = nil
-        stateStore.remove(stateKey)
+        pending = nil
     }
 
     // MARK: - Parcours
@@ -133,9 +151,10 @@ public actor FolderSource: PerceptionSource {
         return components.dropFirst(baseComponents.count).joined(separator: "/")
     }
 
-    private func loadSnapshot() -> [String: Entry]? {
+    private func loadSnapshot() throws -> [String: Entry]? {
         if let snapshot { return snapshot }
-        guard let data = stateStore.load(stateKey) else { return nil }
-        return try? JSONDecoder().decode([String: Entry].self, from: data)
+        guard let data = try stateStore.load(stateKey) else { return nil }
+        do { return try JSONDecoder().decode([String: Entry].self, from: data) }
+        catch { throw PerceptionError.storageFailed("La référence du dossier est illisible et a été conservée.") }
     }
 }

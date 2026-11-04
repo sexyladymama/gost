@@ -27,6 +27,7 @@ public actor PerceptionEngine {
 
     private let trust: TrustEngine
     private let store: EventStore
+    private let sourceState: SourceStateStore?
     private let normalizer: EventNormalizer
     private let understanding: UnderstandingEngine
     private let clock: @Sendable () -> Date
@@ -41,12 +42,14 @@ public actor PerceptionEngine {
     /// - Parameter tick: période de la boucle de collecte automatique ;
     ///   `nil` pour un mode manuel (cycles déclenchés par ``runCycle(force:)``).
     public init(trust: TrustEngine, store: EventStore,
+                sourceState: SourceStateStore? = nil,
                 normalizer: EventNormalizer = EventNormalizer(),
                 understanding: UnderstandingEngine = UnderstandingEngine(),
                 tick: TimeInterval? = 1,
                 clock: @escaping @Sendable () -> Date = { Date() }) {
         self.trust = trust
         self.store = store
+        self.sourceState = sourceState
         self.normalizer = normalizer
         self.understanding = understanding
         self.tickNanoseconds = tick.map { UInt64(max(0.01, $0) * 1_000_000_000) }
@@ -83,7 +86,8 @@ public actor PerceptionEngine {
 
     /// Révoque une source : jeton externe révoqué (si applicable),
     /// autorisation retirée, source retirée du moteur.
-    public func revoke(_ id: SourceID) async {
+    @discardableResult
+    public func revoke(_ id: SourceID, retainHistory: Bool = false) async -> PerceptionIssue? {
         if let source = registrations[id]?.source {
             do { try await source.revokeAccess() } catch {
                 emit(PerceptionIssue(date: clock(), sourceID: id, kind: .connection,
@@ -92,6 +96,15 @@ public actor PerceptionEngine {
         }
         await trust.revoke(id)
         await unregister(id)
+        for consumer in consumers {
+            do { try await consumer.sourceWasRevoked(id, retainHistory: retainHistory) }
+            catch {
+                let issue = Self.issue(for: error, source: id, date: clock())
+                emit(issue)
+                return issue
+            }
+        }
+        return nil
     }
 
     public func addConsumer(_ consumer: PerceptionEventConsumer) {
@@ -182,13 +195,14 @@ public actor PerceptionEngine {
             report.polled.append(id)
 
             do {
-                let raw = try await registration.source.poll()
+                let raw = try await registration.source.collect()
                 let fresh = try await process(raw, from: registration.source.descriptor)
                 report.newEvents += fresh
+                registrations[id]?.detected += fresh.count
+                try await registration.source.acknowledge()
                 registrations[id]?.lastSuccess = clock()
                 registrations[id]?.lastError = nil
                 registrations[id]?.failures = 0
-                registrations[id]?.detected += fresh.count
             } catch {
                 let issue = Self.issue(for: error, source: id, date: clock())
                 registrations[id]?.lastError = issue.message
@@ -210,7 +224,7 @@ public actor PerceptionEngine {
         var events: [GhostEvent] = []
         for observation in raw {
             let normalized = normalizer.normalize(observation, from: source)
-            guard !(await store.contains(fingerprint: normalized.fingerprint)) else { continue }
+            guard !(try await store.contains(fingerprint: normalized.fingerprint)) else { continue }
             events.append(understanding.interpret(normalized, detectedAt: clock()))
         }
         return try await store.insert(events)
@@ -220,10 +234,22 @@ public actor PerceptionEngine {
 
     /// Supprime toutes les données collectées (événements et états des sources).
     public func deleteCollectedData() async throws {
+        await waitForCurrentCycle()
+        // Aucun cycle automatique ne doit s'intercaler dans cet effacement.
+        isCycling = true
+        defer {
+            isCycling = false
+            let waiters = cycleWaiters
+            cycleWaiters.removeAll()
+            waiters.forEach { $0.resume() }
+        }
         try await store.deleteAll()
-        for registration in registrations.values { await registration.source.resetState() }
-        for id in order { registrations[id]?.detected = 0 }
         continuation.yield(.dataCleared)
+        for consumer in consumers { try await consumer.deleteMemory() }
+        // Inclut aussi les curseurs / instantanés des sources déjà révoquées.
+        try sourceState?.removeAll()
+        for registration in registrations.values { try await registration.source.resetState() }
+        for id in order { registrations[id]?.detected = 0 }
         await publishStatuses()
     }
 
@@ -250,7 +276,7 @@ public actor PerceptionEngine {
         case .notAuthorized?, .egressDenied?: kind = .access
         case .authorizationRequired?, .authenticationFailed?: kind = .authorization
         case .connectionFailed?, .rateLimited?, .invalidResponse?: kind = .connection
-        case .misconfigured?, nil: kind = .other
+        case .misconfigured?, .storageFailed?, nil: kind = .other
         }
         return PerceptionIssue(date: date, sourceID: source, kind: kind, message: message)
     }

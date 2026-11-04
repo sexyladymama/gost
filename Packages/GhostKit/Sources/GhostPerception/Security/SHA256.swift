@@ -8,8 +8,8 @@ import CryptoKit
 /// Sur les plateformes Apple, CryptoKit est utilisé. L'implémentation Swift
 /// ci-dessous n'est employée que là où CryptoKit n'existe pas (Linux, pour
 /// les tests) ; les deux sont vérifiées avec les vecteurs de test du NIST.
-enum Digest {
-    static func sha256(_ data: Data) -> Data {
+public enum Digest {
+    public static func sha256(_ data: Data) -> Data {
         #if canImport(CryptoKit)
         return Data(CryptoKit.SHA256.hash(data: data))
         #else

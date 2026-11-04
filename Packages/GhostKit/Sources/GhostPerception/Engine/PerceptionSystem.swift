@@ -34,7 +34,7 @@ public struct PerceptionSystem: Sendable {
         trust = TrustEngine(accessLog: accessLog, storeURL: persistent ? profile.grantsURL : nil, clock: clock)
         store = FileEventStore(fileURL: persistent ? profile.eventsURL : nil)
         sourceState = persistent ? FileSourceStateStore(directory: profile.sourceStateDirectory) : InMemorySourceStateStore()
-        engine = PerceptionEngine(trust: trust, store: store, tick: tick, clock: clock)
+        engine = PerceptionEngine(trust: trust, store: store, sourceState: sourceState, tick: tick, clock: clock)
         http = GuardedHTTPClient(base: baseHTTP, rules: Self.egressRules, trust: trust)
     }
 

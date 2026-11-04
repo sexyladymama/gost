@@ -10,6 +10,12 @@ struct PrivacyView: View {
 
     var body: some View {
         Form {
+            if let error = perception.lastError {
+                Section {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                }
+            }
             Section("Ce que fait GHOST PERCEPTION") {
                 guarantee("eye", "Il ne lit que les sources que vous avez explicitement autorisées.")
                 guarantee("envelope.badge.shield.half.filled", "E-mail : lecture seule. Aucune réponse, aucun envoi, aucune modification.")
@@ -35,19 +41,19 @@ struct PrivacyView: View {
                     Text(perception.system.profile.directory.path)
                         .textSelection(.enabled).lineLimit(2).truncationMode(.middle)
                 }
-                Button("Supprimer les données collectées…", role: .destructive) { confirmDeletion = true }
+                Button("Supprimer les données et la mémoire…", role: .destructive) { confirmDeletion = true }
             }
         }
         .formStyle(.grouped)
-        .confirmationDialog("Supprimer les données collectées ?", isPresented: $confirmDeletion) {
-            Button("Supprimer les événements", role: .destructive) {
+        .confirmationDialog("Supprimer les données et la mémoire ?", isPresented: $confirmDeletion) {
+            Button("Supprimer les événements et la mémoire", role: .destructive) {
                 Task { await perception.deleteCollectedData(includingAccessLog: false) }
             }
-            Button("Supprimer les événements et le journal d'accès", role: .destructive) {
+            Button("Supprimer événements, mémoire et journal", role: .destructive) {
                 Task { await perception.deleteCollectedData(includingAccessLog: true) }
             }
         } message: {
-            Text("Les événements détectés et l'état des sources seront effacés de ce Mac. Les autorisations restent en place ; révoquez-les dans « Sources ».")
+            Text("Les événements, les états des sources et toute la mémoire de contexte (préférences explicites incluses) seront effacés de ce Mac. Les autorisations restent en place ; révoquez-les dans « Sources ».")
         }
     }
 

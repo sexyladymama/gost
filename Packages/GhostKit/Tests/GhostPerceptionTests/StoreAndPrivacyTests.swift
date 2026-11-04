@@ -22,7 +22,7 @@ final class StoreAndPrivacyTests: XCTestCase {
         let again = try await store.insert([sampleEvent(fingerprint: "gmail:1:1"), sampleEvent(fingerprint: "gmail:2:1")])
         XCTAssertEqual(first.count, 1)
         XCTAssertEqual(again.map(\.fingerprint), ["gmail:2:1"])
-        let all = await store.all()
+        let all = try await store.all()
         XCTAssertEqual(all.count, 2)
     }
 
@@ -38,7 +38,7 @@ final class StoreAndPrivacyTests: XCTestCase {
         await engine.start()
         await engine.runCycle(force: true)
         await engine.runCycle(force: true)
-        let all = await store.all()
+        let all = try await store.all()
         XCTAssertEqual(all.count, 1)
         await engine.stop()
     }
@@ -53,7 +53,7 @@ final class StoreAndPrivacyTests: XCTestCase {
         let reopened = FileEventStore(fileURL: url) // nouvelle instance = redémarrage
         let again = try await reopened.insert([sampleEvent(fingerprint: "gmail:1:1")])
         XCTAssertTrue(again.isEmpty)
-        let all = await reopened.all()
+        let all = try await reopened.all()
         XCTAssertEqual(all.count, 1)
     }
 
@@ -139,7 +139,7 @@ final class StoreAndPrivacyTests: XCTestCase {
         await system.engine.runCycle(force: true)
         try Data("x".utf8).write(to: folder.appendingPathComponent("a.pdf"))
         let report = await system.engine.runCycle(force: true)
-        let all = await system.store.all()
+        let all = try await system.store.all()
         XCTAssertTrue(report.issues.isEmpty)
         XCTAssertEqual(all.count, SimulatedMailProvider.scenario().count + 1)
         XCTAssertTrue(network.recorded.isEmpty)
@@ -157,15 +157,15 @@ final class StoreAndPrivacyTests: XCTestCase {
                                                  stateStore: system.sourceState, startDate: Date().addingTimeInterval(-1)))
         await system.engine.start()
         await system.engine.runCycle(force: true)
-        let before = await system.store.all()
+        let before = try await system.store.all()
         XCTAssertEqual(before.count, 2)
         XCTAssertTrue(FileManager.default.fileExists(atPath: system.profile.eventsURL.path))
 
         try await system.engine.deleteCollectedData()
-        let after = await system.store.all()
+        let after = try await system.store.all()
         XCTAssertTrue(after.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: system.profile.eventsURL.path))
-        let reloaded = await FileEventStore(fileURL: system.profile.eventsURL).all()
+        let reloaded = try await FileEventStore(fileURL: system.profile.eventsURL).all()
         XCTAssertTrue(reloaded.isEmpty)
         await system.engine.stop()
     }
@@ -177,7 +177,7 @@ final class StoreAndPrivacyTests: XCTestCase {
         let bob = GhostProfile(id: "bob", baseDirectory: directory)
         XCTAssertNotEqual(alice.directory, bob.directory)
         _ = try await FileEventStore(fileURL: alice.eventsURL).insert([sampleEvent(fingerprint: "a")])
-        let bobEvents = await FileEventStore(fileURL: bob.eventsURL).all()
+        let bobEvents = try await FileEventStore(fileURL: bob.eventsURL).all()
         XCTAssertTrue(bobEvents.isEmpty)
         XCTAssertEqual(GhostProfile(id: "../evil", baseDirectory: directory).directory.lastPathComponent, "___evil")
     }

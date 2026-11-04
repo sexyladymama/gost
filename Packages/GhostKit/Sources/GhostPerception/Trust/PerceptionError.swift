@@ -18,6 +18,8 @@ public enum PerceptionError: Error, Equatable, Sendable, LocalizedError {
     case invalidResponse(String)
     /// Configuration incomplète (ex. identifiant client OAuth manquant).
     case misconfigured(String)
+    /// Données locales illisibles ou impossibles à sauvegarder.
+    case storageFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -37,6 +39,8 @@ public enum PerceptionError: Error, Equatable, Sendable, LocalizedError {
             return "Réponse inattendue du service : \(detail)"
         case let .misconfigured(detail):
             return "Configuration incomplète : \(detail)"
+        case let .storageFailed(detail):
+            return "Stockage local : \(detail)"
         }
     }
 }

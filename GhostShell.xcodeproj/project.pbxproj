@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C00210000000000000000001 /* ReviewRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00210000000000000000002 /* ReviewRegressionTests.swift */; };
 		6A5917F5DBE693056BB7F114 /* GhostApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CA66A3B68180568DDBD71B /* GhostApp.swift */; };
 		A6E39F97905F4A5F756FDD61 /* GhostAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9324558ED388FA7E3F29D4A /* GhostAppDelegate.swift */; };
 		1DD229C72758ACFD5DA7EB1F /* GhostMenuBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B65811A38FB2614BD52B2378 /* GhostMenuBar.swift */; };
@@ -33,9 +34,15 @@
 		A9C5458305CEF0EB2E3AE0CC /* GmailIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 247559EFCABAFB65BCC2EE97 /* GmailIntegrationTests.swift */; };
 		58E887A52D23E8583F3AB28E /* GhostPerception in Frameworks */ = {isa = PBXBuildFile; productRef = C8E35A98FCE117514FFEDEE4 /* GhostPerception */; };
 		896953132EEFE704D2FE2CCE /* GhostPerception in Frameworks */ = {isa = PBXBuildFile; productRef = 4B97E9393ADBDE2D8024631D /* GhostPerception */; };
+		C00300000000000000000001 /* ContextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00300000000000000000011 /* ContextView.swift */; };
+		C00300000000000000000002 /* ContextEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00300000000000000000012 /* ContextEngineTests.swift */; };
+		C00300000000000000000003 /* ContextTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00300000000000000000013 /* ContextTestSupport.swift */; };
+		C00300000000000000000021 /* GhostContext in Frameworks */ = {isa = PBXBuildFile; productRef = C00300000000000000000031 /* GhostContext */; };
+		C00300000000000000000022 /* GhostContext in Frameworks */ = {isa = PBXBuildFile; productRef = C00300000000000000000032 /* GhostContext */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		C00210000000000000000002 /* ReviewRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRegressionTests.swift; sourceTree = "<group>"; };
 		996AD237BC284D463E664FFE /* GhostShell.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GhostShell.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FDB0B7E0E559D2DC0B6A66FC /* GhostShell.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GhostShell.entitlements; sourceTree = "<group>"; };
 		87CA66A3B68180568DDBD71B /* GhostApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhostApp.swift"; sourceTree = "<group>"; };
@@ -61,6 +68,9 @@
 		C60E85BFD78F3F6E63001EAF /* EngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineTests.swift; sourceTree = "<group>"; };
 		026D08AF72B6103AE71CF073 /* StoreAndPrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreAndPrivacyTests.swift; sourceTree = "<group>"; };
 		247559EFCABAFB65BCC2EE97 /* GmailIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailIntegrationTests.swift; sourceTree = "<group>"; };
+		C00300000000000000000011 /* ContextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextView.swift; sourceTree = "<group>"; };
+		C00300000000000000000012 /* ContextEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextEngineTests.swift; sourceTree = "<group>"; };
+		C00300000000000000000013 /* ContextTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContextTestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +80,7 @@
 			files = (
 				70CA573F907E810B2B38BC37 /* GhostKit in Frameworks */,
 				58E887A52D23E8583F3AB28E /* GhostPerception in Frameworks */,
+				C00300000000000000000021 /* GhostContext in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -79,6 +90,7 @@
 			files = (
 				D940DDDAB9EF077159C6943F /* GhostKit in Frameworks */,
 				896953132EEFE704D2FE2CCE /* GhostPerception in Frameworks */,
+				C00300000000000000000022 /* GhostContext in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +103,7 @@
 				5301C14B058270BDA18A48C8 /* GhostShell */,
 				D6C849779C92E025F6502698 /* GhostShellTests */,
 				20668F0D5DBA07EDC1041CD4 /* GhostPerceptionTests */,
+				C00300000000000000000041 /* GhostContextTests */,
 				113236722DEE1DC96F378B9D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -125,6 +138,7 @@
 				FED693C39473550B57E04D1C /* GhostEvent+Appearance.swift */,
 				1D6583F4F8044581C9F9DB97 /* PerceptionWindow.swift */,
 				9C48187A9C473A651AD7F251 /* SourcesView.swift */,
+				C00300000000000000000011 /* ContextView.swift */,
 				7565954ECB11AACD1DDFF707 /* PrivacyView.swift */,
 				43A350A1E18FA3727DCEEEBB /* PerceptionWindowController.swift */,
 			);
@@ -160,10 +174,21 @@
 				47F577392A8CE113843FEF63 /* FolderPerceptionTests.swift */,
 				C60E85BFD78F3F6E63001EAF /* EngineTests.swift */,
 				026D08AF72B6103AE71CF073 /* StoreAndPrivacyTests.swift */,
+				C00210000000000000000002 /* ReviewRegressionTests.swift */,
 				247559EFCABAFB65BCC2EE97 /* GmailIntegrationTests.swift */,
 			);
 			name = GhostPerceptionTests;
 			path = Packages/GhostKit/Tests/GhostPerceptionTests;
+			sourceTree = "<group>";
+		};
+		C00300000000000000000041 /* GhostContextTests */ = {
+			isa = PBXGroup;
+			children = (
+				C00300000000000000000013 /* ContextTestSupport.swift */,
+				C00300000000000000000012 /* ContextEngineTests.swift */,
+			);
+			name = GhostContextTests;
+			path = Packages/GhostKit/Tests/GhostContextTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -185,6 +210,7 @@
 			packageProductDependencies = (
 				F77EE9452E8F6674930CC75E /* GhostKit */,
 				C8E35A98FCE117514FFEDEE4 /* GhostPerception */,
+				C00300000000000000000031 /* GhostContext */,
 			);
 			productName = GhostShell;
 			productReference = 996AD237BC284D463E664FFE /* GhostShell.app */;
@@ -206,6 +232,7 @@
 			packageProductDependencies = (
 				0EA4728CE8184764C0A1DB0D /* GhostKit */,
 				4B97E9393ADBDE2D8024631D /* GhostPerception */,
+				C00300000000000000000032 /* GhostContext */,
 			);
 			productName = GhostShellTests;
 			productReference = 50ED88076C07C90FF1B1A76B /* GhostShellTests.xctest */;
@@ -281,6 +308,7 @@
 				FEF5BF7FB08BFFBFE00B735E /* GhostEvent+Appearance.swift in Sources */,
 				8FDD89A89C9A31CFCC2D0865 /* PerceptionWindow.swift in Sources */,
 				B397D19E41F5FB8BE265F486 /* SourcesView.swift in Sources */,
+				C00300000000000000000001 /* ContextView.swift in Sources */,
 				AC69A53CF320C47963B4315F /* PrivacyView.swift in Sources */,
 				BBAD2966804B1632DFFFBA3B /* PerceptionWindowController.swift in Sources */,
 				1EDBE6C41A6DB816F46A0F91 /* PerceptionController.swift in Sources */,
@@ -301,6 +329,9 @@
 				DF400E5E3326044AAC38EB69 /* FolderPerceptionTests.swift in Sources */,
 				FAFED984141352B8E89E4B9E /* EngineTests.swift in Sources */,
 				9BFD9D9BF699A989073E3084 /* StoreAndPrivacyTests.swift in Sources */,
+				C00210000000000000000001 /* ReviewRegressionTests.swift in Sources */,
+				C00300000000000000000002 /* ContextEngineTests.swift in Sources */,
+				C00300000000000000000003 /* ContextTestSupport.swift in Sources */,
 				A9C5458305CEF0EB2E3AE0CC /* GmailIntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -422,6 +453,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = GhostShell/GhostShell.entitlements;
 				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -529,6 +561,14 @@
 		4B97E9393ADBDE2D8024631D /* GhostPerception */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GhostPerception;
+		};
+		C00300000000000000000031 /* GhostContext */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GhostContext;
+		};
+		C00300000000000000000032 /* GhostContext */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GhostContext;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

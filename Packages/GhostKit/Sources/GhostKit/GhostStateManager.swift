@@ -39,6 +39,9 @@ public final class GhostStateManager {
 
     /// STOPPED → ACTIVE.
     public func start() throws {
+        guard state == .stopped else {
+            throw GhostTransitionError.invalidTransition(from: state, to: .active)
+        }
         try transition(to: .active)
         core.start()
     }

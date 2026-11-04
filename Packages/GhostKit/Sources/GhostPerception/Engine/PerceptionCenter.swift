@@ -48,8 +48,12 @@ public final class PerceptionCenter: GhostCoreInterface {
             }
         })
         enqueue { [weak self] in
-            let saved = await store.all()
-            await self?.setInitialEvents(saved)
+            do {
+                let saved = try await store.all()
+                await self?.setInitialEvents(saved)
+            } catch {
+                await self?.reportStorageError(error)
+            }
         }
     }
 
@@ -75,17 +79,44 @@ public final class PerceptionCenter: GhostCoreInterface {
 
     /// Révoque l'autorisation d'une source. Les événements déjà détectés sont conservés
     /// sauf si `deleteData` est vrai.
-    public func revoke(_ id: SourceID, deleteData: Bool) async {
-        await runInQueue {
-            await self.engine.revoke(id)
-            if deleteData { try? await self.store.delete(source: id) }
+    public func revoke(_ id: SourceID, deleteData: Bool, retainContext: Bool = false) async {
+        let failure: (any Error)? = await runInQueue {
+            if let issue = await self.engine.revoke(id, retainHistory: retainContext && !deleteData) {
+                return PerceptionError.storageFailed(issue.message)
+            }
+            if deleteData {
+                do { try await self.store.delete(source: id) }
+                catch { return error }
+            }
+            return nil
         }
-        if deleteData { events.removeAll { $0.source.id == id } }
+        if let failure { reportStorageError(failure) }
+        else if deleteData { events.removeAll { $0.source.id == id } }
         await reloadAccessLog()
     }
 
     public func register(_ source: PerceptionSource, enabled: Bool = true) async {
         await runInQueue { await self.engine.register(source, enabled: enabled) }
+    }
+
+    /// Branchement et relecture sérialisés avec collecte, révocation et effacement.
+    public func attachConsumer(_ consumer: PerceptionEventConsumer) async throws {
+        await runInQueue { await self.engine.addConsumer(consumer) }
+        try await replayEvents(to: consumer)
+    }
+
+    public func replayEvents(to consumer: PerceptionEventConsumer) async throws {
+        let failure: (any Error)? = await runInQueue {
+            do {
+                let saved = try await self.store.all()
+                // Les événements révoqués ne sont pas réinjectés par la relecture.
+                let statuses = await self.engine.statuses()
+                let authorized = Set(statuses.filter(\.isAuthorized).map(\.id))
+                await consumer.consume(saved.filter { authorized.contains($0.source.id) })
+            } catch { return error }
+            return nil
+        }
+        if let failure { throw failure }
     }
 
     /// Supprime tous les événements et états de sources ; optionnellement le journal d'accès.
@@ -125,6 +156,11 @@ public final class PerceptionCenter: GhostCoreInterface {
                 done.resume(returning: await command())
             }
         }
+    }
+
+    private func reportStorageError(_ error: any Error) {
+        issues.insert(PerceptionIssue(date: Date(), sourceID: SourceID("storage"), kind: .other,
+                                     message: error.localizedDescription), at: 0)
     }
 
     private func setInitialEvents(_ saved: [GhostEvent]) {

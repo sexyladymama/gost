@@ -15,8 +15,19 @@ public protocol PerceptionSource: Sendable {
     /// Collecte les nouvelles observations. Doit vérifier ses autorisations
     /// auprès du ``TrustEngine`` avant tout accès.
     func poll() async throws -> [RawObservation]
+    /// Collecte sans avancer le curseur durable avant l'enregistrement des événements.
+    func collect() async throws -> [RawObservation]
+    /// Valide le curseur uniquement après l'enregistrement réussi des événements.
+    func acknowledge() async throws
     /// Révoque l'accès externe de la source (ex. jeton OAuth), si applicable.
     func revokeAccess() async throws
     /// Oublie l'état interne (curseurs, instantanés) après suppression des données.
-    func resetState() async
+    func resetState() async throws
+}
+
+public extension PerceptionSource {
+    // Pour les sources sans curseur uniquement. Une source avec état durable
+    // doit différer sa validation dans acknowledge(), comme EmailSource/FolderSource.
+    func collect() async throws -> [RawObservation] { try await poll() }
+    func acknowledge() async throws {}
 }

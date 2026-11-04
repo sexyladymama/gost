@@ -44,13 +44,29 @@ aucun code d'interface ; compilable et testable sous macOS et Linux).
 pour chaque source **activée** dont l'intervalle est écoulé :
 
 1. la source vérifie son autorisation auprès du `TrustEngine` (sinon : refus journalisé) ;
-2. `poll()` renvoie des `RawObservation` (e-mail ou changement de fichier) ;
+2. `collect()` renvoie des `RawObservation` (e-mail ou changement de fichier),
+   sans avancer le curseur durable de la source ;
 3. `EventNormalizer` produit une `NormalizedObservation` (format commun) ;
 4. si l'empreinte est déjà connue, l'observation est ignorée ;
 5. `UnderstandingEngine` produit un `GhostEvent` ;
 6. `EventStore.insert` ne conserve que les événements nouveaux ;
-7. les nouveaux événements sont diffusés à l'interface (`PerceptionUpdate.newEvents`)
+7. `acknowledge()` sauvegarde le curseur / l'instantané de la source, seulement
+   après l'enregistrement des événements ;
+8. les nouveaux événements sont diffusés à l'interface (`PerceptionUpdate.newEvents`)
    et aux futurs moteurs (`PerceptionEventConsumer`).
+
+Depuis Mission 002.1, un échec d'écriture des événements conserve le lot en
+attente et l'ancien curseur pour permettre une nouvelle tentative. Après un
+redémarrage, les sources repartent du dernier état validé ; le dédoublonnage
+évite de republier un événement déjà sauvegardé. La date de départ e-mail
+provient de l'autorisation persistée, même si aucun premier curseur n'avait
+encore été validé. Un échec de sauvegarde du curseur après celle des événements
+est signalé sans perdre leur notification.
+
+Les lectures de l'EventStore et du SourceStateStore peuvent lever une erreur.
+Un fichier existant illisible n'est pas traité comme un stockage vide ni
+écrasé. Les modifications de l'EventStore en mémoire ne sont validées qu'après
+la réussite de la sauvegarde ou de la suppression sur disque.
 
 Intervalles : simulation 20 s, Gmail 60 s, dossier 5 s. En cas d'erreur,
 attente exponentielle (×2, ×4… jusqu'à ×32), puis retour à la normale au
@@ -112,7 +128,11 @@ ou de modification n'existe dans le code.
 
 ### 3.3 Ajouter une source
 
-1. Créer un type conforme à `PerceptionSource` (`poll()`, `revokeAccess()`, `resetState()`).
+1. Créer un type conforme à `PerceptionSource`. Une source avec curseur doit
+   implémenter `collect()` et `acknowledge()` séparément ; `poll()` sert de
+   commodité pour une collecte directement validée. `resetState()` et les
+   accès au stockage remontent leurs erreurs. Les implémentations par défaut
+   de collecte/validation sont réservées aux sources sans état durable.
 2. Ajouter une `Permission` et vérifier `trust.require(...)` au début de `poll()`.
 3. Produire des `RawObservation` (ajouter un cas si nécessaire) et l'étendre dans
    `EventNormalizer`.

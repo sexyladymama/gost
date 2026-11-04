@@ -82,4 +82,11 @@ public struct CycleReport: Sendable {
 /// mémoire…). Ils reçoivent les nouveaux événements structurés.
 public protocol PerceptionEventConsumer: Sendable {
     func consume(_ events: [GhostEvent]) async
+    func sourceWasRevoked(_ source: SourceID, retainHistory: Bool) async throws
+    func deleteMemory() async throws
+}
+
+public extension PerceptionEventConsumer {
+    func sourceWasRevoked(_ source: SourceID, retainHistory: Bool) async throws {}
+    func deleteMemory() async throws {}
 }

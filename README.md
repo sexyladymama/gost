@@ -12,6 +12,13 @@ comme événements structurés pour les futurs moteurs de GHOST.
 GHOST PERCEPTION **perçoit et comprend, mais n'agit pas** : il n'envoie aucun
 e-mail, ne modifie ni ne supprime aucun fichier et n'exécute aucune tâche.
 
+## Références du projet
+
+- [Dossier fondateur GHOST](docs/GHOST_FOUNDATION.md) : vision et décisions transmises par le fondateur.
+- [Audit Mission 001 du 4 novembre 2026](docs/MISSION_001_AUDIT.md) : résultats techniques et vérifications restantes.
+- [Mission 002.1](docs/MISSION_002_1.md) : corrections de stockage, reprise après panne et validation.
+- [GHOST CONTEXT (Mission 003)](docs/CONTEXT.md) : mémoire et compréhension contextuelle, cloisonnement, preuves, corrections.
+
 ## Fonctionnalités
 
 **Barre de menus et fenêtre de contrôle**
@@ -28,7 +35,8 @@ e-mail, ne modifie ni ne supprime aucun fichier et n'exécute aucune tâche.
 - *Anomalies* : erreurs de connexion, d'autorisation ou d'accès ;
 - *Sources* : activer/désactiver, connecter, **révoquer** chaque source ;
 - *Journal d'accès* : chaque accès à une source (autorisé, refusé, échec) ;
-- *Confidentialité* : garanties, arrêt complet, **suppression des données collectées**.
+- *Mémoire* : ce que GHOST comprend (projets, personnes, documents, demandes, échéances), statut confirmé / hypothèse / inconnu, preuves, corrections ;
+- *Confidentialité* : garanties, arrêt complet, **suppression des données collectées et de la mémoire**.
 
 **Sources**
 - *E-mail* : boîte de test **simulée** (par défaut, aucun réseau) ou compte
@@ -75,7 +83,7 @@ swift test --package-path Packages/GhostKit
 
 ou, dans Xcode, `Product ▸ Test` (⌘U) avec le schéma **GhostShell**.
 
-Les tests (80) couvrent la logique d'état de la Mission 001 et les exigences
+Les tests (110) couvrent la logique d'état de la Mission 001 et les exigences
 de la Mission 002 (préfixes `testR01_` à `testR10_`) :
 
 | # | Exigence | Tests |
@@ -94,6 +102,11 @@ de la Mission 002 (préfixes `testR01_` à `testR10_`) :
 Les services externes sont simulés dans les tests (réponses HTTP Gmail
 enregistrées, aucune connexion réelle).
 
+Les tests de `ReviewRegressionTests` vérifient aussi les échecs d'écriture,
+la préservation d'un stockage illisible et la reprise des sources après panne.
+Les erreurs de stockage apparaissent dans « Anomalies » ; les erreurs de
+suppression sont également affichées dans « Confidentialité ».
+
 ## Architecture
 
 ```
@@ -111,9 +124,11 @@ gost/
 ├── Packages/GhostKit/                Logique, sans aucune dépendance à l'UI
 │   ├── Sources/GhostKit/             États de GHOST, GhostCoreInterface (Mission 001)
 │   ├── Sources/GhostPerception/      Moteur de perception (Mission 002)
+│   ├── Sources/GhostContext/         Mémoire contextuelle, SQLite local (Mission 003)
 │   └── Tests/                        Tests XCTest
 └── docs/
     ├── PERCEPTION.md                 Documentation technique du moteur
+    ├── CONTEXT.md                    Mémoire et compréhension contextuelle
     └── GMAIL_SETUP.md                Connexion d'une boîte Gmail de test
 ```
 

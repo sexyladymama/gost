@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import GhostKit
 import GhostPerception
+import GhostContext
 
 /// Configure et pilote les sources de perception depuis l'interface.
 ///
@@ -28,6 +29,7 @@ final class PerceptionController {
 
     @ObservationIgnored let system: PerceptionSystem
     @ObservationIgnored let center: PerceptionCenter
+    let context: ContextCenter
 
     private(set) var emailMode: EmailMode
     private(set) var gmailAccount: String?
@@ -50,6 +52,7 @@ final class PerceptionController {
         let profile = GhostProfile.current(baseDirectory: base.appendingPathComponent("GHOST", isDirectory: true))
         system = PerceptionSystem(profile: profile, persistent: persistent)
         center = system.makeCenter()
+        context = ContextCenter(engine: ContextEngine(profile: profile, trust: system.trust, persistent: persistent))
         defaults = persistent ? .standard : UserDefaults(suiteName: "ghost.preview") ?? .standard
         secrets = persistent ? KeychainSecretStore(profileID: profile.id) : InMemorySecretStore()
         emailMode = EmailMode(rawValue: defaults.string(forKey: Keys.emailMode) ?? "") ?? .none
@@ -68,6 +71,7 @@ final class PerceptionController {
 
     /// Réenregistre les sources autorisées lors d'une session précédente.
     func restoreSources() async {
+        defer { Task { await self.initializeContext() } }
         switch emailMode {
         case .simulation:
             await registerEmailSource(provider: SimulatedMailProvider())
@@ -131,9 +135,9 @@ final class PerceptionController {
     }
 
     /// Révoque la source e-mail (et le jeton Google le cas échéant).
-    func removeEmailSource(deleteData: Bool) async {
+    func removeEmailSource(deleteData: Bool, retainContext: Bool = false) async {
         guard emailMode != .none else { return }
-        await center.revoke(gmailID, deleteData: deleteData)
+        await center.revoke(gmailID, deleteData: deleteData, retainContext: retainContext)
         if emailMode == .gmail { try? secrets.delete("gmail.oauth") }
         gmailAccount = nil
         defaults.removeObject(forKey: Keys.account)
@@ -147,8 +151,11 @@ final class PerceptionController {
     }
 
     private func registerEmailSource(provider: MailProvider) async {
+        // Une panne avant le premier événement ne doit pas déplacer la borne
+        // de départ au prochain lancement et faire perdre les e-mails intermédiaires.
+        let grant = await system.trust.grant(for: gmailID)
         let source = EmailSource(id: gmailID, provider: provider, trust: system.trust,
-                                 stateStore: system.sourceState, startDate: Date(),
+                                 stateStore: system.sourceState, startDate: grant?.grantedAt ?? Date(),
                                  pollInterval: provider.isSimulated ? 20 : 60)
         await center.register(source)
     }
@@ -198,9 +205,9 @@ final class PerceptionController {
     }
 
     /// Révoque l'accès au dossier.
-    func removeFolderSource(deleteData: Bool) async {
+    func removeFolderSource(deleteData: Bool, retainContext: Bool = false) async {
         guard folderURL != nil || defaults.data(forKey: Keys.folderBookmark) != nil else { return }
-        await center.revoke(folderID, deleteData: deleteData)
+        await center.revoke(folderID, deleteData: deleteData, retainContext: retainContext)
         folderAccess?.stop()
         folderAccess = nil
         folderURL = nil
@@ -209,7 +216,30 @@ final class PerceptionController {
 
     // MARK: - Données
 
+    private func initializeContext() async {
+        do {
+            try await context.engine.reconcilePermissions()
+            try await center.attachConsumer(context.engine)
+            await context.reload()
+        } catch { await context.engine.report(error); await context.reload() }
+    }
+
+    func refreshContext() async {
+        do { try await center.replayEvents(to: context.engine) }
+        catch { await context.engine.report(error) }
+        await context.reload()
+    }
+
+    func setContextScope(_ scope: ContextScope, source: SourceID) async {
+        do {
+            try await context.engine.setScope(scope, for: source)
+            try await center.replayEvents(to: context.engine)
+        } catch { await context.engine.report(error) }
+        await context.reload()
+    }
+
     func deleteCollectedData(includingAccessLog: Bool) async {
+        lastError = nil
         do {
             try await center.deleteCollectedData(includingAccessLog: includingAccessLog)
         } catch {

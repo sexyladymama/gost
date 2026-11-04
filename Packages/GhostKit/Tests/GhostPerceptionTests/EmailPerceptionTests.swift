@@ -28,7 +28,7 @@ final class EmailPerceptionTests: XCTestCase {
         XCTAssertEqual(event.source.kind, .email)
         XCTAssertEqual(event.detectedAt, clock.now)
         XCTAssertEqual(event.fingerprint, "gmail:m1:1")
-        let stored = await store.all()
+        let stored = try await store.all()
         XCTAssertEqual(stored.map(\.id), [event.id])
         await engine.stop()
     }
