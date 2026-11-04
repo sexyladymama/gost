@@ -1,5 +1,5 @@
 import XCTest
-@testable import GhostKit
+import GhostKit
 
 /// Moteur espion : enregistre les appels reçus, sans aucune autre logique.
 @MainActor

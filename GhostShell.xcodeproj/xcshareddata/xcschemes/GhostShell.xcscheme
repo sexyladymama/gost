@@ -26,17 +26,16 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      shouldAutocreateTestPlan = "YES">
+      shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
          <TestableReference
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "GhostKitTests"
-               BuildableName = "GhostKitTests"
-               BlueprintName = "GhostKitTests"
-               ReferencedContainer = "container:Packages/GhostKit">
+               BlueprintIdentifier = "ACCC9105DF5383111407FD5B"
+               BuildableName = "GhostShellTests.xctest"
+               BlueprintName = "GhostShellTests"
+               ReferencedContainer = "container:GhostShell.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>

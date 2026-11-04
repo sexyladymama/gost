@@ -1,5 +1,5 @@
 import XCTest
-@testable import GhostKit
+import GhostKit
 
 /// Tests des règles pures de transition.
 final class GhostStateMachineTests: XCTestCase {

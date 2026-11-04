@@ -13,6 +13,9 @@
 		A2D2E9D8D95EC3CFF2FF8495 /* GhostDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D00FDFED92377BF1081A881 /* GhostDashboard.swift */; };
 		5DFF0F9AFB5794FF46DA8416 /* GhostState+Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C2E95F90A13D0267A22027 /* GhostState+Appearance.swift */; };
 		70CA573F907E810B2B38BC37 /* GhostKit in Frameworks */ = {isa = PBXBuildFile; productRef = F77EE9452E8F6674930CC75E /* GhostKit */; };
+		574ADB9B94F1C19BC00972D2 /* GhostStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65C7BA4993EE4D895564920D /* GhostStateMachineTests.swift */; };
+		0964FE1FA622A2517F777579 /* GhostStateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88CE7841A22DF7155B952C0D /* GhostStateManagerTests.swift */; };
+		D940DDDAB9EF077159C6943F /* GhostKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0EA4728CE8184764C0A1DB0D /* GhostKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +26,9 @@
 		B65811A38FB2614BD52B2378 /* GhostMenuBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhostMenuBar.swift"; sourceTree = "<group>"; };
 		2D00FDFED92377BF1081A881 /* GhostDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhostDashboard.swift"; sourceTree = "<group>"; };
 		53C2E95F90A13D0267A22027 /* GhostState+Appearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhostState+Appearance.swift"; sourceTree = "<group>"; };
+		50ED88076C07C90FF1B1A76B /* GhostShellTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GhostShellTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		65C7BA4993EE4D895564920D /* GhostStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostStateMachineTests.swift; sourceTree = "<group>"; };
+		88CE7841A22DF7155B952C0D /* GhostStateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostStateManagerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -34,6 +40,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A5B5EB885F52D8AE7F9D336C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D940DDDAB9EF077159C6943F /* GhostKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -41,6 +55,7 @@
 			isa = PBXGroup;
 			children = (
 				5301C14B058270BDA18A48C8 /* GhostShell */,
+				D6C849779C92E025F6502698 /* GhostShellTests */,
 				113236722DEE1DC96F378B9D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -49,6 +64,7 @@
 			isa = PBXGroup;
 			children = (
 				996AD237BC284D463E664FFE /* GhostShell.app */,
+				50ED88076C07C90FF1B1A76B /* GhostShellTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -74,6 +90,16 @@
 			path = UI;
 			sourceTree = "<group>";
 		};
+		D6C849779C92E025F6502698 /* GhostShellTests */ = {
+			isa = PBXGroup;
+			children = (
+				65C7BA4993EE4D895564920D /* GhostStateMachineTests.swift */,
+				88CE7841A22DF7155B952C0D /* GhostStateManagerTests.swift */,
+			);
+			name = GhostShellTests;
+			path = Packages/GhostKit/Tests/GhostKitTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -97,6 +123,26 @@
 			productReference = 996AD237BC284D463E664FFE /* GhostShell.app */;
 			productType = "com.apple.product-type.application";
 		};
+		ACCC9105DF5383111407FD5B /* GhostShellTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2755EC0A260BB01FF8051ADA /* Build configuration list for PBXNativeTarget "GhostShellTests" */;
+			buildPhases = (
+				3D1E937DC2490D6FB88F6B6E /* Sources */,
+				A5B5EB885F52D8AE7F9D336C /* Frameworks */,
+				B9A7CF27723DE04CD270856F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GhostShellTests;
+			packageProductDependencies = (
+				0EA4728CE8184764C0A1DB0D /* GhostKit */,
+			);
+			productName = GhostShellTests;
+			productReference = 50ED88076C07C90FF1B1A76B /* GhostShellTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -108,6 +154,9 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					42AEFBAE01D2DFD981F7DA7D = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					ACCC9105DF5383111407FD5B = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -129,12 +178,20 @@
 			projectRoot = "";
 			targets = (
 				42AEFBAE01D2DFD981F7DA7D /* GhostShell */,
+				ACCC9105DF5383111407FD5B /* GhostShellTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		8A6A452CEE30B0908A47D41D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B9A7CF27723DE04CD270856F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -153,6 +210,15 @@
 				1DD229C72758ACFD5DA7EB1F /* GhostMenuBar.swift in Sources */,
 				A2D2E9D8D95EC3CFF2FF8495 /* GhostDashboard.swift in Sources */,
 				5DFF0F9AFB5794FF46DA8416 /* GhostState+Appearance.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3D1E937DC2490D6FB88F6B6E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				574ADB9B94F1C19BC00972D2 /* GhostStateMachineTests.swift in Sources */,
+				0964FE1FA622A2517F777579 /* GhostStateManagerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -295,6 +361,36 @@
 			};
 			name = Release;
 		};
+		215F55D49DF4F1C80FA60645 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.ghost.shell.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		19E8E04E691688CABC9F08AA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.ghost.shell.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -316,6 +412,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		2755EC0A260BB01FF8051ADA /* Build configuration list for PBXNativeTarget "GhostShellTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				215F55D49DF4F1C80FA60645 /* Debug */,
+				19E8E04E691688CABC9F08AA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -327,6 +432,10 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		F77EE9452E8F6674930CC75E /* GhostKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GhostKit;
+		};
+		0EA4728CE8184764C0A1DB0D /* GhostKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GhostKit;
 		};

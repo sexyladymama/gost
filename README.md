@@ -61,7 +61,8 @@ swift test --package-path Packages/GhostKit
 
 ```
 gost/
-├── GhostShell.xcodeproj         Projet Xcode (cible app + schéma partagé)
+├── GhostShell.xcodeproj         Projet Xcode (cibles GhostShell + GhostShellTests,
+│                                schéma partagé)
 ├── GhostShell/                  Couche interface (SwiftUI / AppKit)
 │   ├── GhostApp.swift           Point d'entrée (@main)
 │   ├── GhostAppDelegate.swift   Cycle de vie : démarrage, arrêt propre
@@ -76,7 +77,8 @@ gost/
     │   ├── GhostStateMachine.swift   Règles de transition (fonctions pures)
     │   ├── GhostStateManager.swift   Source de vérité observable
     │   └── GhostCoreInterface.swift  Protocole du futur moteur + IdleGhostCore
-    └── Tests/GhostKitTests/          Tests XCTest
+    └── Tests/GhostKitTests/          Tests XCTest (utilisés par `swift test`
+                                      et par la cible Xcode GhostShellTests)
 ```
 
 Flux : `GhostDashboard` → `GhostStateManager` (valide la transition via
