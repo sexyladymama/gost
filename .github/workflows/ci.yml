@@ -26,6 +26,19 @@ jobs:
             -destination 'platform=macOS' \
             -derivedDataPath build
 
+      - name: Launch smoke test (app must start and stay running)
+        run: |
+          APP=build/Build/Products/Debug/GhostShell.app/Contents/MacOS/GhostShell
+          "$APP" &
+          PID=$!
+          sleep 10
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "GhostShell is running (pid $PID)"
+            kill "$PID"
+          else
+            wait "$PID"; echo "GhostShell exited early with status $?"; exit 1
+          fi
+
       - name: Test via the Xcode scheme
         run: |
           xcodebuild test \

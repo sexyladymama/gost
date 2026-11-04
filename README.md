@@ -1,39 +1,61 @@
-# GHOST — GHOST SHELL
+# GHOST — GHOST SHELL & GHOST PERCEPTION
 
-GHOST SHELL est la première application native macOS du projet GHOST :
-une application de barre de menus qui affiche et contrôle l'état de GHOST.
+GHOST SHELL est l'application native macOS de GHOST : elle vit dans la barre
+de menus et affiche et contrôle l'état de GHOST (ACTIVE / PAUSED / STOPPED).
 
-Cette version **ne contient aucune intelligence artificielle**, n'observe pas
-l'utilisateur, ne collecte aucune donnée, n'accède ni au réseau, ni aux emails,
-ni aux fichiers personnels. Elle pose uniquement les fondations (interface,
-gestion d'état, point d'extension pour le futur moteur).
+GHOST PERCEPTION (Mission 002) est son premier moteur de perception : à partir
+de sources que **vous autorisez explicitement** (une boîte e-mail et un
+dossier local), il détecte les nouveaux éléments, les comprend (demande,
+tâche, échéance, relance, information…), explique pourquoi, et les enregistre
+comme événements structurés pour les futurs moteurs de GHOST.
+
+GHOST PERCEPTION **perçoit et comprend, mais n'agit pas** : il n'envoie aucun
+e-mail, ne modifie ni ne supprime aucun fichier et n'exécute aucune tâche.
 
 ## Fonctionnalités
 
-- Icône dans la barre de menus (pas d'icône dans le Dock).
-- Petite fenêtre de contrôle au clic sur l'icône :
-  - nom **GHOST** ;
-  - statut courant : `ACTIVE`, `PAUSED` ou `STOPPED` ;
-  - bouton **Mettre en pause / Reprendre** (ACTIVE ⇄ PAUSED) ;
-  - bouton **Quitter GHOST** (⌘Q) qui arrête GHOST proprement (→ `STOPPED`)
-    avant de fermer l'application.
+**Barre de menus et fenêtre de contrôle**
+- icône dont l'aspect reflète l'état, avec le nombre d'événements importants non consultés ;
+- statut GHOST et état de la perception, sources actives, anomalies, derniers événements importants ;
+- **Mettre en pause / Reprendre** (la collecte est réellement suspendue en pause) ;
+- **Arrêter / Démarrer la perception** ;
+- **Quitter GHOST** (⌘Q) avec arrêt propre.
+
+**Fenêtre « GHOST — Perception »** (lien « Voir ce que GHOST a détecté… »)
+- *Événements* : liste et détail, avec type, personnes, action attendue,
+  résultat attendu, informations nécessaires, échéance, confiance, et
+  **« Pourquoi GHOST l'a détecté »** (règles déclenchées et extraits) ;
+- *Anomalies* : erreurs de connexion, d'autorisation ou d'accès ;
+- *Sources* : activer/désactiver, connecter, **révoquer** chaque source ;
+- *Journal d'accès* : chaque accès à une source (autorisé, refusé, échec) ;
+- *Confidentialité* : garanties, arrêt complet, **suppression des données collectées**.
+
+**Sources**
+- *E-mail* : boîte de test **simulée** (par défaut, aucun réseau) ou compte
+  **Gmail réel** via OAuth, en lecture seule (voir [docs/GMAIL_SETUP.md](docs/GMAIL_SETUP.md)) ;
+- *Dossier local* : un dossier choisi dans le sélecteur macOS ; seules les
+  métadonnées des fichiers sont observées.
 
 ## Prérequis
 
-- macOS 14 Sonoma ou plus récent (requis par le framework `Observation`).
-- Xcode 15 ou plus récent.
-- Aucune dépendance externe, aucun compte développeur nécessaire
-  (signature locale « Sign to Run Locally »).
+- macOS 14 Sonoma ou plus récent ;
+- Xcode 15 ou plus récent (CI : Xcode 16.4 sur macOS 15) ;
+- aucune dépendance externe, aucun compte développeur (signature locale) ;
+- pour Gmail réel uniquement : un projet Google Cloud et un ID client OAuth
+  ([procédure](docs/GMAIL_SETUP.md)).
 
-## Lancer l'application
+## Installation et lancement
 
 ### Avec Xcode
 
-1. Ouvrir `GhostShell.xcodeproj`.
-2. Sélectionner le schéma **GhostShell** et la destination **My Mac**.
-3. `Product ▸ Run` (⌘R).
-4. L'icône GHOST apparaît dans la barre de menus, en haut à droite de l'écran.
-   Cliquer dessus pour ouvrir la fenêtre de contrôle.
+1. Cloner le dépôt et ouvrir `GhostShell.xcodeproj`.
+2. Schéma **GhostShell**, destination **My Mac**, puis `Product ▸ Run` (⌘R).
+3. L'icône GHOST apparaît dans la barre de menus. Cliquer dessus, puis
+   **Voir ce que GHOST a détecté… ▸ Sources** :
+   - **Utiliser la boîte de test (simulation)** : un e-mail fictif arrive toutes
+     les 20 s environ (7 au total) ;
+   - **Choisir un dossier…** : sélectionner un dossier de test, puis y déposer ou
+     modifier des fichiers (détection en ~5 s).
 
 ### En ligne de commande
 
@@ -47,63 +69,73 @@ open build/Build/Products/Debug/GhostShell.app
 
 ## Tests
 
-Les tests couvrent la logique de changement d'état (`GhostStateMachine`,
-`GhostStateManager`) et la communication avec le moteur.
-
-- Dans Xcode : `Product ▸ Test` (⌘U) avec le schéma **GhostShell**.
-- En ligne de commande (macOS ou Linux, sans Xcode) :
-
 ```bash
 swift test --package-path Packages/GhostKit
 ```
+
+ou, dans Xcode, `Product ▸ Test` (⌘U) avec le schéma **GhostShell**.
+
+Les tests (80) couvrent la logique d'état de la Mission 001 et les exigences
+de la Mission 002 (préfixes `testR01_` à `testR10_`) :
+
+| # | Exigence | Tests |
+|---|----------|-------|
+| 1 | Un nouvel e-mail est détecté | `EmailPerceptionTests.testR01_*` |
+| 2 | Une demande est identifiée | `EmailPerceptionTests.testR02_*` |
+| 3 | Une échéance est extraite | `EmailPerceptionTests.testR03_*`, `DeadlineExtractorTests` |
+| 4 | Un e-mail informatif n'est pas une mission | `EmailPerceptionTests.testR04_*` |
+| 5 | Un nouveau fichier est détecté | `FolderPerceptionTests.testR05_*` |
+| 6 | Un dossier non autorisé n'est jamais inspecté | `FolderPerceptionTests.testR06_*` |
+| 7 | La pause arrête réellement la perception | `EngineTests.testR07_*` |
+| 8 | Une erreur de connexion est gérée | `EngineTests.testR08_*` |
+| 9 | Pas de doublons | `StoreAndPrivacyTests.testR09_*` |
+| 10 | Aucune transmission non autorisée | `StoreAndPrivacyTests.testR10_*` |
+
+Les services externes sont simulés dans les tests (réponses HTTP Gmail
+enregistrées, aucune connexion réelle).
 
 ## Architecture
 
 ```
 gost/
-├── GhostShell.xcodeproj         Projet Xcode (cibles GhostShell + GhostShellTests,
-│                                schéma partagé)
-├── GhostShell/                  Couche interface (SwiftUI / AppKit)
-│   ├── GhostApp.swift           Point d'entrée (@main)
-│   ├── GhostAppDelegate.swift   Cycle de vie : démarrage, arrêt propre
-│   ├── GhostShell.entitlements  Bac à sable, aucune autorisation
-│   └── UI/
-│       ├── GhostMenuBar.swift           Icône + MenuBarExtra
-│       ├── GhostDashboard.swift         Fenêtre de contrôle
-│       └── GhostState+Appearance.swift  Icônes et couleurs des états
-└── Packages/GhostKit/           Logique, sans aucune dépendance à l'UI
-    ├── Sources/GhostKit/
-    │   ├── GhostState.swift          ACTIVE / PAUSED / STOPPED
-    │   ├── GhostStateMachine.swift   Règles de transition (fonctions pures)
-    │   ├── GhostStateManager.swift   Source de vérité observable
-    │   └── GhostCoreInterface.swift  Protocole du futur moteur + IdleGhostCore
-    └── Tests/GhostKitTests/          Tests XCTest (utilisés par `swift test`
-                                      et par la cible Xcode GhostShellTests)
+├── GhostShell.xcodeproj              Projet Xcode (GhostShell + GhostShellTests)
+├── GhostShell/                       Couche interface (SwiftUI / AppKit)
+│   ├── GhostApp.swift                Point d'entrée (@main)
+│   ├── GhostAppDelegate.swift        Cycle de vie : démarrage, restauration des sources, arrêt
+│   ├── GhostShell.entitlements       Bac à sable : réseau sortant, dossier choisi en lecture seule
+│   ├── Perception/
+│   │   ├── PerceptionController.swift   Actions utilisateur sur les sources
+│   │   ├── GmailAuthorizer.swift        Fenêtre d'authentification Google
+│   │   └── SecurityScopedFolder.swift   Signet de dossier en lecture seule
+│   └── UI/                           Barre de menus, tableau de bord, fenêtre Perception
+├── Packages/GhostKit/                Logique, sans aucune dépendance à l'UI
+│   ├── Sources/GhostKit/             États de GHOST, GhostCoreInterface (Mission 001)
+│   ├── Sources/GhostPerception/      Moteur de perception (Mission 002)
+│   └── Tests/                        Tests XCTest
+└── docs/
+    ├── PERCEPTION.md                 Documentation technique du moteur
+    └── GMAIL_SETUP.md                Connexion d'une boîte Gmail de test
 ```
 
-Flux : `GhostDashboard` → `GhostStateManager` (valide la transition via
-`GhostStateMachine`) → `GhostCoreInterface` (notifié de la transition).
+Flux : sources autorisées → `PerceptionEngine` → `EventNormalizer` →
+`UnderstandingEngine` → `EventStore` → `PerceptionCenter` (implémente
+`GhostCoreInterface`) → interface. Détails : [docs/PERCEPTION.md](docs/PERCEPTION.md).
 
-### Transitions autorisées
+### États de GHOST (Mission 001)
 
-| Depuis    | Vers      | Méthode         |
-|-----------|-----------|-----------------|
-| `STOPPED` | `ACTIVE`  | `start()`       |
-| `ACTIVE`  | `PAUSED`  | `pause()`       |
-| `PAUSED`  | `ACTIVE`  | `resume()`      |
-| `ACTIVE`  | `STOPPED` | `stop()`        |
-| `PAUSED`  | `STOPPED` | `stop()`        |
+| Depuis    | Vers      | Méthode   | Effet sur la perception |
+|-----------|-----------|-----------|--------------------------|
+| `STOPPED` | `ACTIVE`  | `start()` | collecte démarrée |
+| `ACTIVE`  | `PAUSED`  | `pause()` | collecte suspendue |
+| `PAUSED`  | `ACTIVE`  | `resume()`| collecte reprise |
+| `ACTIVE`/`PAUSED` | `STOPPED` | `stop()` | collecte arrêtée |
 
-`togglePause()` bascule ACTIVE ⇄ PAUSED et lève une erreur si GHOST est arrêté.
-`stop()` est idempotent. Toute autre transition lève `GhostTransitionError`.
+## Confidentialité
 
-### Brancher un futur moteur
-
-Le moteur central devra se conformer à `GhostCoreInterface`, puis être injecté :
-
-```swift
-let stateManager = GhostStateManager(core: MonMoteur())
-```
-
-L'interface n'a pas à être modifiée. Par défaut, `IdleGhostCore` est utilisé :
-il ne fait strictement rien.
+- Aucune source n'est lue sans action explicite de votre part ; chaque accès est journalisé.
+- Aucune capture d'écran, aucune frappe clavier, aucune observation d'applications.
+- E-mail en lecture seule (`gmail.readonly`) ; dossier : métadonnées uniquement.
+- Seuls `gmail.googleapis.com` et `oauth2.googleapis.com` sont joignables, et
+  seulement pour la source Gmail ; toute autre destination est bloquée.
+- Jetons dans le Trousseau macOS ; données dans le conteneur de l'application,
+  séparées par utilisateur ; suppression en un clic.

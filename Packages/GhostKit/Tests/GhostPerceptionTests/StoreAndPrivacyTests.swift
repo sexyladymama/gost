@@ -1,4 +1,7 @@
 import XCTest
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import GhostPerception
 
 /// Exigences 9 et 10 : stockage sans doublons, aucune transmission non autorisée.
@@ -193,5 +196,21 @@ final class StoreAndPrivacyTests: XCTestCase {
         XCTAssertEqual(records.map(\.operation), ["trust.grant", "mail.fetch"])
         let raw = try String(contentsOf: url, encoding: .utf8)
         XCTAssertFalse(raw.contains("fichier Excel"), "le journal ne contient aucun contenu")
+    }
+}
+
+/// Le client réseau réel refuse les redirections (contournement du filtre).
+final class RedirectPolicyTests: XCTestCase {
+    func testRedirectsAreRefused() {
+        let blocker = RedirectBlocker()
+        let session = URLSession(configuration: .ephemeral)
+        let task = session.dataTask(with: URL(string: "https://gmail.googleapis.com/")!)
+        let response = HTTPURLResponse(url: URL(string: "https://gmail.googleapis.com/")!, statusCode: 302,
+                                       httpVersion: nil, headerFields: ["Location": "https://evil.example/"])!
+        var followed: URLRequest? = URLRequest(url: URL(string: "https://placeholder.example")!)
+        blocker.urlSession(session, task: task, willPerformHTTPRedirection: response,
+                           newRequest: URLRequest(url: URL(string: "https://evil.example/")!)) { followed = $0 }
+        XCTAssertNil(followed)
+        task.cancel()
     }
 }

@@ -37,6 +37,10 @@ public protocol HTTPClient: Sendable {
 }
 
 /// Implémentation réelle basée sur `URLSession` (pas de cache, pas de cookies).
+///
+/// Les **redirections HTTP sont refusées** : sinon un hôte autorisé pourrait
+/// renvoyer la requête (et son jeton) vers une destination non autorisée,
+/// contournant ``GuardedHTTPClient``.
 public final class URLSessionHTTPClient: HTTPClient, @unchecked Sendable {
     private let session: URLSession
 
@@ -44,8 +48,9 @@ public final class URLSessionHTTPClient: HTTPClient, @unchecked Sendable {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 20
         configuration.httpCookieAcceptPolicy = .never
+        configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
-        session = URLSession(configuration: configuration)
+        session = URLSession(configuration: configuration, delegate: RedirectBlocker(), delegateQueue: nil)
     }
 
     public func send(_ request: HTTPRequest) async throws -> HTTPResponse {
@@ -60,6 +65,14 @@ public final class URLSessionHTTPClient: HTTPClient, @unchecked Sendable {
         } catch {
             throw PerceptionError.connectionFailed(error.localizedDescription)
         }
+    }
+}
+
+/// Refuse toute redirection : la réponse 3xx est renvoyée telle quelle.
+final class RedirectBlocker: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }
 
