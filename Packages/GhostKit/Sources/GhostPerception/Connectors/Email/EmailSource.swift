@@ -35,7 +35,8 @@ public actor EmailSource: PerceptionSource {
         self.startDate = startDate
     }
 
-    private var stateKey: String { "email.\(descriptor.id.rawValue)" }
+    /// Curseur distinct pour la simulation et pour un compte réel.
+    private var stateKey: String { "email.\(descriptor.id.rawValue).\(descriptor.isSimulated ? "simulation" : "live")" }
 
     public func poll() async throws -> [RawObservation] {
         try await trust.require(descriptor.id, .readMail, operation: "mail.fetch", target: provider.displayName)

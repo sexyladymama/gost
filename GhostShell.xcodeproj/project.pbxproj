@@ -16,6 +16,23 @@
 		574ADB9B94F1C19BC00972D2 /* GhostStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65C7BA4993EE4D895564920D /* GhostStateMachineTests.swift */; };
 		0964FE1FA622A2517F777579 /* GhostStateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88CE7841A22DF7155B952C0D /* GhostStateManagerTests.swift */; };
 		D940DDDAB9EF077159C6943F /* GhostKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0EA4728CE8184764C0A1DB0D /* GhostKit */; };
+		FEF5BF7FB08BFFBFE00B735E /* GhostEvent+Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = FED693C39473550B57E04D1C /* GhostEvent+Appearance.swift */; };
+		8FDD89A89C9A31CFCC2D0865 /* PerceptionWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D6583F4F8044581C9F9DB97 /* PerceptionWindow.swift */; };
+		B397D19E41F5FB8BE265F486 /* SourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C48187A9C473A651AD7F251 /* SourcesView.swift */; };
+		AC69A53CF320C47963B4315F /* PrivacyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7565954ECB11AACD1DDFF707 /* PrivacyView.swift */; };
+		BBAD2966804B1632DFFFBA3B /* PerceptionWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43A350A1E18FA3727DCEEEBB /* PerceptionWindowController.swift */; };
+		1EDBE6C41A6DB816F46A0F91 /* PerceptionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416126A4190403EF26C7F30B /* PerceptionController.swift */; };
+		586F51D6141336B445B05D81 /* SecurityScopedFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3709E96D37EAD810E6D5C199 /* SecurityScopedFolder.swift */; };
+		D7613A6534890D824DE4CC6D /* GmailAuthorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3BC46E44B6F22DDDE7BA0C2 /* GmailAuthorizer.swift */; };
+		179795779331740781BF4617 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A466800E4B5A06A2D5F04317 /* TestSupport.swift */; };
+		B4B84C5173591E36996A735A /* EmailPerceptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 683DE94B9AA789DBB1CFB508 /* EmailPerceptionTests.swift */; };
+		93C4198446BF5FE77C3DA532 /* DeadlineExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 990F28A48C745280BBF770AD /* DeadlineExtractorTests.swift */; };
+		DF400E5E3326044AAC38EB69 /* FolderPerceptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F577392A8CE113843FEF63 /* FolderPerceptionTests.swift */; };
+		FAFED984141352B8E89E4B9E /* EngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60E85BFD78F3F6E63001EAF /* EngineTests.swift */; };
+		9BFD9D9BF699A989073E3084 /* StoreAndPrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026D08AF72B6103AE71CF073 /* StoreAndPrivacyTests.swift */; };
+		A9C5458305CEF0EB2E3AE0CC /* GmailIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 247559EFCABAFB65BCC2EE97 /* GmailIntegrationTests.swift */; };
+		58E887A52D23E8583F3AB28E /* GhostPerception in Frameworks */ = {isa = PBXBuildFile; productRef = C8E35A98FCE117514FFEDEE4 /* GhostPerception */; };
+		896953132EEFE704D2FE2CCE /* GhostPerception in Frameworks */ = {isa = PBXBuildFile; productRef = 4B97E9393ADBDE2D8024631D /* GhostPerception */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,6 +46,21 @@
 		50ED88076C07C90FF1B1A76B /* GhostShellTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GhostShellTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		65C7BA4993EE4D895564920D /* GhostStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostStateMachineTests.swift; sourceTree = "<group>"; };
 		88CE7841A22DF7155B952C0D /* GhostStateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostStateManagerTests.swift; sourceTree = "<group>"; };
+		FED693C39473550B57E04D1C /* GhostEvent+Appearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhostEvent+Appearance.swift"; sourceTree = "<group>"; };
+		1D6583F4F8044581C9F9DB97 /* PerceptionWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PerceptionWindow.swift"; sourceTree = "<group>"; };
+		9C48187A9C473A651AD7F251 /* SourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SourcesView.swift"; sourceTree = "<group>"; };
+		7565954ECB11AACD1DDFF707 /* PrivacyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PrivacyView.swift"; sourceTree = "<group>"; };
+		43A350A1E18FA3727DCEEEBB /* PerceptionWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PerceptionWindowController.swift"; sourceTree = "<group>"; };
+		416126A4190403EF26C7F30B /* PerceptionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PerceptionController.swift"; sourceTree = "<group>"; };
+		3709E96D37EAD810E6D5C199 /* SecurityScopedFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SecurityScopedFolder.swift"; sourceTree = "<group>"; };
+		E3BC46E44B6F22DDDE7BA0C2 /* GmailAuthorizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GmailAuthorizer.swift"; sourceTree = "<group>"; };
+		A466800E4B5A06A2D5F04317 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		683DE94B9AA789DBB1CFB508 /* EmailPerceptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailPerceptionTests.swift; sourceTree = "<group>"; };
+		990F28A48C745280BBF770AD /* DeadlineExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeadlineExtractorTests.swift; sourceTree = "<group>"; };
+		47F577392A8CE113843FEF63 /* FolderPerceptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPerceptionTests.swift; sourceTree = "<group>"; };
+		C60E85BFD78F3F6E63001EAF /* EngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineTests.swift; sourceTree = "<group>"; };
+		026D08AF72B6103AE71CF073 /* StoreAndPrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreAndPrivacyTests.swift; sourceTree = "<group>"; };
+		247559EFCABAFB65BCC2EE97 /* GmailIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GmailIntegrationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -37,6 +69,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				70CA573F907E810B2B38BC37 /* GhostKit in Frameworks */,
+				58E887A52D23E8583F3AB28E /* GhostPerception in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -45,6 +78,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D940DDDAB9EF077159C6943F /* GhostKit in Frameworks */,
+				896953132EEFE704D2FE2CCE /* GhostPerception in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -56,6 +90,7 @@
 			children = (
 				5301C14B058270BDA18A48C8 /* GhostShell */,
 				D6C849779C92E025F6502698 /* GhostShellTests */,
+				20668F0D5DBA07EDC1041CD4 /* GhostPerceptionTests */,
 				113236722DEE1DC96F378B9D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -74,6 +109,7 @@
 			children = (
 				87CA66A3B68180568DDBD71B /* GhostApp.swift */,
 				C9324558ED388FA7E3F29D4A /* GhostAppDelegate.swift */,
+				E9EB4EB737DF652F53C39CB9 /* Perception */,
 				FC2C7314EEBF1FDDC765177A /* UI */,
 				FDB0B7E0E559D2DC0B6A66FC /* GhostShell.entitlements */,
 			);
@@ -86,6 +122,11 @@
 				B65811A38FB2614BD52B2378 /* GhostMenuBar.swift */,
 				2D00FDFED92377BF1081A881 /* GhostDashboard.swift */,
 				53C2E95F90A13D0267A22027 /* GhostState+Appearance.swift */,
+				FED693C39473550B57E04D1C /* GhostEvent+Appearance.swift */,
+				1D6583F4F8044581C9F9DB97 /* PerceptionWindow.swift */,
+				9C48187A9C473A651AD7F251 /* SourcesView.swift */,
+				7565954ECB11AACD1DDFF707 /* PrivacyView.swift */,
+				43A350A1E18FA3727DCEEEBB /* PerceptionWindowController.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -98,6 +139,31 @@
 			);
 			name = GhostShellTests;
 			path = Packages/GhostKit/Tests/GhostKitTests;
+			sourceTree = "<group>";
+		};
+		E9EB4EB737DF652F53C39CB9 /* Perception */ = {
+			isa = PBXGroup;
+			children = (
+				416126A4190403EF26C7F30B /* PerceptionController.swift */,
+				3709E96D37EAD810E6D5C199 /* SecurityScopedFolder.swift */,
+				E3BC46E44B6F22DDDE7BA0C2 /* GmailAuthorizer.swift */,
+			);
+			path = Perception;
+			sourceTree = "<group>";
+		};
+		20668F0D5DBA07EDC1041CD4 /* GhostPerceptionTests */ = {
+			isa = PBXGroup;
+			children = (
+				A466800E4B5A06A2D5F04317 /* TestSupport.swift */,
+				683DE94B9AA789DBB1CFB508 /* EmailPerceptionTests.swift */,
+				990F28A48C745280BBF770AD /* DeadlineExtractorTests.swift */,
+				47F577392A8CE113843FEF63 /* FolderPerceptionTests.swift */,
+				C60E85BFD78F3F6E63001EAF /* EngineTests.swift */,
+				026D08AF72B6103AE71CF073 /* StoreAndPrivacyTests.swift */,
+				247559EFCABAFB65BCC2EE97 /* GmailIntegrationTests.swift */,
+			);
+			name = GhostPerceptionTests;
+			path = Packages/GhostKit/Tests/GhostPerceptionTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -118,6 +184,7 @@
 			name = GhostShell;
 			packageProductDependencies = (
 				F77EE9452E8F6674930CC75E /* GhostKit */,
+				C8E35A98FCE117514FFEDEE4 /* GhostPerception */,
 			);
 			productName = GhostShell;
 			productReference = 996AD237BC284D463E664FFE /* GhostShell.app */;
@@ -138,6 +205,7 @@
 			name = GhostShellTests;
 			packageProductDependencies = (
 				0EA4728CE8184764C0A1DB0D /* GhostKit */,
+				4B97E9393ADBDE2D8024631D /* GhostPerception */,
 			);
 			productName = GhostShellTests;
 			productReference = 50ED88076C07C90FF1B1A76B /* GhostShellTests.xctest */;
@@ -210,6 +278,14 @@
 				1DD229C72758ACFD5DA7EB1F /* GhostMenuBar.swift in Sources */,
 				A2D2E9D8D95EC3CFF2FF8495 /* GhostDashboard.swift in Sources */,
 				5DFF0F9AFB5794FF46DA8416 /* GhostState+Appearance.swift in Sources */,
+				FEF5BF7FB08BFFBFE00B735E /* GhostEvent+Appearance.swift in Sources */,
+				8FDD89A89C9A31CFCC2D0865 /* PerceptionWindow.swift in Sources */,
+				B397D19E41F5FB8BE265F486 /* SourcesView.swift in Sources */,
+				AC69A53CF320C47963B4315F /* PrivacyView.swift in Sources */,
+				BBAD2966804B1632DFFFBA3B /* PerceptionWindowController.swift in Sources */,
+				1EDBE6C41A6DB816F46A0F91 /* PerceptionController.swift in Sources */,
+				586F51D6141336B445B05D81 /* SecurityScopedFolder.swift in Sources */,
+				D7613A6534890D824DE4CC6D /* GmailAuthorizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -219,6 +295,13 @@
 			files = (
 				574ADB9B94F1C19BC00972D2 /* GhostStateMachineTests.swift in Sources */,
 				0964FE1FA622A2517F777579 /* GhostStateManagerTests.swift in Sources */,
+				179795779331740781BF4617 /* TestSupport.swift in Sources */,
+				B4B84C5173591E36996A735A /* EmailPerceptionTests.swift in Sources */,
+				93C4198446BF5FE77C3DA532 /* DeadlineExtractorTests.swift in Sources */,
+				DF400E5E3326044AAC38EB69 /* FolderPerceptionTests.swift in Sources */,
+				FAFED984141352B8E89E4B9E /* EngineTests.swift in Sources */,
+				9BFD9D9BF699A989073E3084 /* StoreAndPrivacyTests.swift in Sources */,
+				A9C5458305CEF0EB2E3AE0CC /* GmailIntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -326,7 +409,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.ghost.shell;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -353,7 +436,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.ghost.shell;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -368,7 +451,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.ghost.shell.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -383,7 +466,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.ghost.shell.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -438,6 +521,14 @@
 		0EA4728CE8184764C0A1DB0D /* GhostKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GhostKit;
+		};
+		C8E35A98FCE117514FFEDEE4 /* GhostPerception */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GhostPerception;
+		};
+		4B97E9393ADBDE2D8024631D /* GhostPerception */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GhostPerception;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -41,7 +41,8 @@ public actor FolderSource: PerceptionSource {
         self.maxEntries = maxEntries
     }
 
-    private var stateKey: String { "folder.\(descriptor.id.rawValue)" }
+    /// Une référence par dossier : changer de dossier ne compare pas deux dossiers différents.
+    private var stateKey: String { "folder.\(descriptor.id.rawValue).\(StableHash.fnv1a(root.standardizedFileURL.path))" }
 
     public func poll() async throws -> [RawObservation] {
         let authorizedRoot = try await trust.requireFolderAccess(root, for: descriptor.id)

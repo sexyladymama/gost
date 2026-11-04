@@ -7,11 +7,13 @@ import SwiftUI
 @main
 struct GhostApp: App {
 
-    /// Le délégué possède le gestionnaire d'état et gère le cycle de vie
-    /// (démarrage au lancement, arrêt propre à la fermeture).
+    /// Le délégué possède le gestionnaire d'état et la perception, et gère le
+    /// cycle de vie (démarrage au lancement, arrêt propre à la fermeture).
     @NSApplicationDelegateAdaptor(GhostAppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        GhostMenuBar(stateManager: appDelegate.stateManager)
+        GhostMenuBar(stateManager: appDelegate.stateManager,
+                     perception: appDelegate.perception,
+                     windows: appDelegate.windows)
     }
 }

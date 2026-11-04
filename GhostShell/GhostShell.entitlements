@@ -2,10 +2,21 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Bac à sable activé, sans aucune autre autorisation :
-	     pas de réseau, pas d'accès aux fichiers utilisateur,
-	     pas de caméra, micro, contacts, etc. -->
+	<!-- Bac à sable activé. Autorisations limitées au strict nécessaire
+	     de GHOST PERCEPTION (Mission 002) : -->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+	<!-- Connexions sortantes uniquement (API Gmail et OAuth Google).
+	     Le moteur bloque en plus toute autre destination (GuardedHTTPClient). -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- Lecture seule du dossier choisi par l'utilisateur dans le sélecteur. -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+	<!-- Mémorisation de ce choix entre deux lancements (signet en lecture seule). -->
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
+	<!-- Aucune autre autorisation : pas de caméra, micro, contacts,
+	     calendrier, enregistrement d'écran, ni accès complet au disque. -->
 </dict>
 </plist>
