@@ -575,3 +575,39 @@ final class RealPhraseTests: XCTestCase {
         _ = event
     }
 }
+
+
+final class LogoSpecTests: XCTestCase {
+    func testSpecIsParsedValidatedAndDrawnByGhost() throws {
+        let spec = try XCTUnwrap(LogoSpec.parse(##"Voici : {"name":"Noche","initials":"n","background":"#101820","accent":"#F2AA4C","style":"badge"}"##))
+        XCTAssertEqual(spec.initials, "N")
+        for style in ["monogram", "badge", "wordmark"] {
+            var s = spec; s.style = style
+            let svg = s.svg()
+            XCTAssertNil(SVGGuard.problem(svg), style)
+            let png = SVGGuard.render(svg)
+            XCTAssertNotNil(png.png, "\(style) : \(png.problem ?? "")")
+        }
+    }
+    func testBadColorsAndNamesAreRepaired() throws {
+        let spec = try XCTUnwrap(LogoSpec.parse(#"{"name":"A<b>","background":"rouge","accent":"rouge","style":"x"}"#))
+        XCTAssertEqual(spec.background, "#0B0F14"); XCTAssertEqual(spec.accent, "#8FC7FF")
+        XCTAssertNil(SVGGuard.problem(spec.svg()), "le nom est échappé")
+        XCTAssertNil(LogoSpec.parse(##"{"name":"","background":"#000000","accent":"#ffffff","style":"badge"}"##))
+    }
+    func testDocumentSenderFieldsAreFilledAndOthersAreCounted() {
+        let r = CreationPrompts.fillSender("Cordialement,\n[Votre nom]\nDisponible dès le [date de début]. Université [Nom de l'université]", user: "Romain")
+        XCTAssertTrue(r.text.contains("Romain")); XCTAssertEqual(r.remaining, 2)
+    }
+    func testLowContrastColorsAreReplacedByReadableOnes() throws {
+        let spec = try XCTUnwrap(LogoSpec.parse(##"{"name":"Noche","background":"#FFD700","accent":"#FFFFFF","style":"wordmark"}"##))
+        XCTAssertEqual(spec.accent, "#111111")
+        let dark = try XCTUnwrap(LogoSpec.parse(##"{"name":"Noche","background":"#101820","accent":"#202830","style":"wordmark"}"##))
+        XCTAssertEqual(dark.accent, "#FFFFFF")
+        XCTAssertEqual(CreationPrompts.title(fromMarkdown: "# **Candidature**\n\ntexte", fallback: "Document"), "Candidature")
+    }
+    func testMailSubjectGetsACapital() throws {
+        let c = try XCTUnwrap(EmailDrafter.parse(#"{"subject":"rdv lundi","body":"Bonjour, rendez-vous lundi. Romain"}"#))
+        XCTAssertEqual(c.subject, "Rdv lundi")
+    }
+}

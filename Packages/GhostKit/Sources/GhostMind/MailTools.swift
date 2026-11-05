@@ -63,7 +63,8 @@ struct EmailDrafter {
     static let system = """
     Tu rédiges des e-mails au nom de l'utilisateur, en français naturel, courtois et concis (tutoiement si la demande tutoie, sinon vouvoiement).
     N'invente aucun fait : pas de date, de chiffre, de lieu ni d'engagement qui ne figure pas dans la demande. Si une information manque, écris sans elle.
-    Utilise le prénom du destinataire pour la formule d'appel.
+    Utilise le prénom du destinataire pour la formule d'appel ; s'il est inconnu, écris « Bonjour, ». L'expéditeur est l'utilisateur (« expediteur ») : signe avec son prénom.
+    Pas de phrase de remplissage (« j'espère que tu vas bien », « merci pour ta compréhension ») : dis seulement ce que la demande dit. L'objet commence par une majuscule.
     Réponds UNIQUEMENT par un objet JSON : {"subject":"objet court","body":"texte complet avec formule de politesse et signature"}.
     """
 
@@ -79,9 +80,10 @@ struct EmailDrafter {
         guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end,
               let data = String(text[start...end]).data(using: .utf8),
               let c = try? JSONDecoder().decode(Content.self, from: data) else { return nil }
-        let subject = c.subject.trimmingCharacters(in: .whitespacesAndNewlines), body = c.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        var subject = c.subject.trimmingCharacters(in: .whitespacesAndNewlines); let body = c.body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (3...140).contains(subject.count), (10...4_000).contains(body.count),
               !body.contains("{{"), !subject.contains("{{") else { return nil }
+        subject = subject.prefix(1).uppercased() + subject.dropFirst()
         return Content(subject: subject, body: body)
     }
 

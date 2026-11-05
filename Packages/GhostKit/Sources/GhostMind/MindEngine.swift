@@ -163,9 +163,10 @@ public actor MindEngine: PerceptionEventConsumer {
             return make(.needsFolder, note: "Choisissez le dossier où GHOST range ce qu'il crée (Sources ▸ Création), puis « Refaire ».")
         }
         var reason: String?
+        var docNote: String?
         for model in models {
             if case .unavailable(let r) = await model.availability() { reason = reason ?? r; continue }
-            var prompt = CreationPrompts.prompt(request: request, brief: brief)
+            var prompt = CreationPrompts.prompt(request: request, brief: brief, user: userName)
             var mask: ReversibleMask?
             if !model.isLocal {
                 let masked = ReversibleMask.mask(prompt, names: [userName] + userName.split(separator: " ").map(String.init).filter { $0.count > 2 }, emails: [])
@@ -177,7 +178,7 @@ public actor MindEngine: PerceptionEventConsumer {
                 let by = model.name + (model.isSimulated ? " (SIMULÉ)" : "")
                 #if canImport(AppKit)
                 if kind == .logo {
-                    guard let svg = SVGGuard.extract(text) else { reason = reason ?? "Le modèle n'a pas produit de SVG."; continue }
+                    guard let svg = LogoSpec.parse(text)?.svg() ?? SVGGuard.extract(text) else { reason = reason ?? "Le modèle n'a pas produit de SVG."; continue }
                     if let problem = SVGGuard.problem(svg) { reason = reason ?? problem; continue }
                     let rendered = SVGGuard.render(svg)
                     guard let png = rendered.png else { reason = reason ?? rendered.problem; continue }
@@ -186,10 +187,12 @@ public actor MindEngine: PerceptionEventConsumer {
                     let pngURL = try output.write(png, preferredName: ((svgURL.lastPathComponent as NSString).deletingPathExtension) + ".png")
                     return make(.done, paths: [svgURL.path, pngURL.path], by: by)
                 } else {
-                    guard CreationPrompts.validDocument(text), let rtf = MarkdownRTF.render(text) else { reason = reason ?? "Document inexploitable."; continue }
-                    title = CreationPrompts.title(fromMarkdown: text, fallback: "Document")
+                    let filled = CreationPrompts.fillSender(text, user: userName)
+                    guard CreationPrompts.validDocument(filled.text), let rtf = MarkdownRTF.render(filled.text) else { reason = reason ?? "Document inexploitable."; continue }
+                    title = CreationPrompts.title(fromMarkdown: filled.text, fallback: "Document")
+                    docNote = filled.remaining > 0 ? "\(filled.remaining) champ(s) entre [crochets] à compléter dans le document (GHOST n'invente pas ces informations)." : nil
                     let url = try output.write(rtf, preferredName: title + ".rtf")
-                    return make(.done, paths: [url.path], by: by)
+                    return make(.done, paths: [url.path], by: by, note: docNote)
                 }
                 #endif
             } catch { reason = reason ?? error.localizedDescription }
