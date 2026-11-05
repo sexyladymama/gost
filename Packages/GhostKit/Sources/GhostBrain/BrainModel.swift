@@ -329,6 +329,9 @@ public struct TriggerRef: Codable, Hashable, Sendable {
     public var senderEmail: String?
     /// Texte-signal borné (titre, résumé, extraits de preuve de Perception) : sert à recalculer la priorité plus tard.
     public var signalText: String
+    /// Phrase de demande d'origine (casse et accents conservés, 160 caractères au plus), pour les moteurs en aval.
+    /// Optionnel : les missions enregistrées avant cet ajout restent lisibles.
+    public var excerpt: String?
 }
 
 public struct HistoryEntry: Codable, Hashable, Identifiable, Sendable {

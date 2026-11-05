@@ -10,7 +10,8 @@ enum MissionLifecycle {
         TriggerRef(eventID: e.id, fingerprint: e.fingerprint, kind: e.kind, sourceID: e.source.id.rawValue,
                    sourceName: e.source.displayName, summary: e.summary, threadID: e.metadata["thread"],
                    detectedAt: e.detectedAt, occurredAt: e.occurredAt, senderEmail: DecisionEngine.senderEmail(e),
-                   signalText: String(BrainSignals.read(e).text.prefix(600)))
+                   signalText: String(BrainSignals.read(e).text.prefix(600)),
+                   excerpt: e.evidence.first { $0.rule.hasPrefix("request.") }?.excerpt)
     }
 
     // MARK: Création

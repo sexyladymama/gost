@@ -3,7 +3,7 @@ import GhostPerception
 
 // MARK: - Contrat commun
 
-public enum ModelTask: String, Codable, Sendable { case refineAmbiguity }
+public enum ModelTask: String, Codable, Sendable { case refineAmbiguity, generate }
 
 public struct ModelRequest: Sendable {
     public var task: ModelTask

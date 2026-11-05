@@ -24,7 +24,8 @@ let package = Package(
         .library(name: "GhostContext", targets: ["GhostContext"]),
         .library(name: "GhostBrain", targets: ["GhostBrain"]),
         .library(name: "GhostAutonomy", targets: ["GhostAutonomy"]),
-        .library(name: "GhostVision", targets: ["GhostVision"])
+        .library(name: "GhostVision", targets: ["GhostVision"]),
+        .library(name: "GhostMind", targets: ["GhostMind"])
     ],
     dependencies: [.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20")],
     targets: [
@@ -40,6 +41,8 @@ let package = Package(
         .target(name: "GhostAutonomy", dependencies: ["GhostBrain", "GhostPerception", .product(name: "ZIPFoundation", package: "ZIPFoundation")]),
         .testTarget(name: "GhostAutonomyTests", dependencies: ["GhostAutonomy", "GhostContext"]),
         .target(name: "GhostVision", dependencies: ["GhostPerception"]),
-        .testTarget(name: "GhostVisionTests", dependencies: ["GhostVision", "GhostPerception", "GhostContext", "GhostBrain"])
+        .testTarget(name: "GhostVisionTests", dependencies: ["GhostVision", "GhostPerception", "GhostContext", "GhostBrain"]),
+        .target(name: "GhostMind", dependencies: ["GhostBrain", "GhostContext", "GhostPerception"]),
+        .testTarget(name: "GhostMindTests", dependencies: ["GhostMind", "GhostBrain", "GhostContext", "GhostPerception", "GhostVision"])
     ]
 )
