@@ -37,6 +37,7 @@ final class PerceptionController {
         static let excludedApps = "vision.excludedApps"
         static let searchEnabled = "mind.search.enabled"
         static let homeArea = "mind.homeArea"
+        static let outputBookmark = "mind.output.bookmark"
     }
 
     @ObservationIgnored let system: PerceptionSystem
@@ -47,6 +48,10 @@ final class PerceptionController {
     let calendar: CalendarCenter
     let mind: MindCenter
     @ObservationIgnored let calendarWriter: CalendarWriter
+    @ObservationIgnored private let outputWriter = FolderOutputWriter()
+    @ObservationIgnored private var outputAccess: SecurityScopedFolder?
+    /// Nom du dossier où GHOST range ses créations (choisi par l'utilisateur).
+    private(set) var outputFolderName: String?
     @ObservationIgnored private var executionAccess: [String: [SecurityScopedFolder]] = [:]
     @ObservationIgnored private let gateway: ModelGateway
 
@@ -104,7 +109,7 @@ final class PerceptionController {
         mind = MindCenter(engine: MindEngine(profile: profile, brain: brain.engine, context: context.engine, trust: system.trust,
                                              models: [OnDeviceLanguageModel(), GatewayLanguageModel(gateway: gateway)],
                                              sender: AppleMailSender(), userName: firstName,
-                                             searcher: MapKitPlaceSearcher(),
+                                             searcher: MapKitPlaceSearcher(), output: outputWriter,
                                              homeArea: { [defaults] in defaults.string(forKey: "mind.homeArea") },
                                              persistent: persistent))
         screenEnabled = defaults.bool(forKey: Keys.screenEnabled)
@@ -144,6 +149,7 @@ final class PerceptionController {
             break
         }
         if screenEnabled { await registerScreenSource() }
+        restoreOutputFolder()
         if let bookmark = defaults.data(forKey: Keys.folderBookmark) {
             do {
                 let access = try SecurityScopedFolder(bookmark: bookmark)
@@ -157,6 +163,33 @@ final class PerceptionController {
                 lastError = "Le dossier autorisé n'est plus accessible : \(error.localizedDescription)"
             }
         }
+    }
+
+    // MARK: - Dossier de création
+
+    private func restoreOutputFolder() {
+        guard let bookmark = defaults.data(forKey: Keys.outputBookmark) else { return }
+        do {
+            let access = try SecurityScopedFolder(bookmark: bookmark)
+            outputAccess = access; outputWriter.setFolder(access.url); outputFolderName = access.url.lastPathComponent
+        } catch { lastError = "Le dossier de création n'est plus accessible : \(error.localizedDescription). Choisissez-le à nouveau." }
+    }
+
+    /// L'utilisateur choisit le dossier où GHOST range ce qu'il crée (le seul où GHOST écrit les logos et documents).
+    func chooseOutputFolder() async {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false; panel.canCreateDirectories = true
+        panel.prompt = "Choisir"
+        panel.message = "GHOST y rangera les logos et documents qu'il crée à votre demande. Il n'écrase jamais un fichier existant."
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let bookmark = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+            let access = try SecurityScopedFolder(bookmark: bookmark)
+            outputAccess?.stop()
+            outputAccess = access; outputWriter.setFolder(access.url); outputFolderName = access.url.lastPathComponent
+            defaults.set(bookmark, forKey: Keys.outputBookmark)
+        } catch { lastError = Self.describe(error) }
     }
 
     // MARK: - Écran et agenda

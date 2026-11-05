@@ -27,6 +27,17 @@ struct SourcesView: View {
             }
 
             Section {
+                HStack {
+                    Text(perception.outputFolderName.map { "Dossier : \($0)" } ?? "Aucun dossier choisi").foregroundStyle(perception.outputFolderName == nil ? .orange : .primary)
+                    Spacer()
+                    Button(perception.outputFolderName == nil ? "Choisir un dossier…" : "Changer…") { Task { await perception.chooseOutputFolder() } }
+                }
+                Text("GHOST y range les logos et documents qu'il crée à votre demande. Il n'écrase jamais un fichier existant.").font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("Création")
+            }
+
+            Section {
                 Toggle("GHOST regarde mon écran", isOn: Binding(get: { perception.screenEnabled },
                                                                   set: { value in Task { await perception.setScreenObservation(value) } }))
                 if perception.screenEnabled {
