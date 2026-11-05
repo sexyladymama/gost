@@ -549,3 +549,29 @@ final class WebSearchTests: XCTestCase {
         do { _ = try await bad.search(query: "x y"); XCTFail("429 doit échouer") } catch { XCTAssertTrue(error.localizedDescription.contains("429")) }
     }
 }
+
+final class RealPhraseTests: XCTestCase {
+    // Phrase réellement tapée par le fondateur dans Messages (5 novembre 2026) : l'adresse e-mail contient un point.
+    private let phrase = "Tu peux me faire un mail a envoyer a romain.meunier92@gmail.com pour lui dire qu'on a un RDV au resto maison sauvage le lundi de la semaine pro stp"
+
+    func testAddressInsideTheRequestIsTheRecipientAndTopicIsClean() {
+        XCTAssertEqual(IntentClassifier.classify(phrase),
+                       .writeMessage(recipient: "romain.meunier92@gmail.com", topic: "on a un RDV au resto maison sauvage le lundi de la semaine pro"))
+    }
+    func testResolverUsesAnAddressGivenInTheRequestAndSimplifiedDraftReadsCleanly() async throws {
+        let env = try await Env.make(models: [])
+        let graph = try await env.context.snapshot()
+        let match = RecipientResolver.resolve(hint: "romain.meunier92@gmail.com", in: graph, namespace: "x")
+        XCTAssertEqual(match?.email, "romain.meunier92@gmail.com")
+        let draft = EmailDrafter.simplified(recipient: match?.name, topic: "on a un RDV au resto maison sauvage le lundi de la semaine pro", user: "Romain")
+        XCTAssertEqual(draft.body, "Bonjour,\n\nOn a un RDV au resto maison sauvage le lundi de la semaine pro.\n\nBien cordialement,\nRomain")
+    }
+    func testADotInsideAnAddressDoesNotCutTheRequestExcerpt() async throws {
+        let env = try await Env.make(models: [])
+        let event = try await env.request(phrase)
+        let missions = try await env.brain.snapshot().missions.values
+        let excerpt = try XCTUnwrap(missions.first?.triggers.last?.excerpt)
+        XCTAssertTrue(excerpt.contains("romain.meunier92@gmail.com pour lui dire"), excerpt)
+        _ = event
+    }
+}

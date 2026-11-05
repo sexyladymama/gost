@@ -9,6 +9,8 @@ public enum RecipientResolver {
     /// Une seule personne correspondante avec adresse → trouvée ; sinon `nil` (l'utilisateur choisit).
     public static func resolve(hint: String?, in graph: ContextSnapshot, namespace: String) -> Match? {
         guard let hint, hint.count > 1 else { return nil }
+        // Adresse donnée telle quelle dans la demande : on l'utilise, sans la deviner.
+        if MailDraft.isValidAddress(hint) { return Match(name: hint, email: hint) }
         let wanted = IntentClassifier.fold(hint)
         let candidates = graph.nodes.values.filter { node in
             guard node.kind == .person, node.namespace == namespace, let email = node.properties["email"], !email.isEmpty else { return false }
@@ -66,7 +68,7 @@ struct EmailDrafter {
     """
 
     static func prompt(request: String, recipient: String?, topic: String, user: String) -> String {
-        let first = recipient?.split(separator: " ").first.map(String.init)
+        let first = recipient.flatMap { $0.contains("@") ? nil : $0.split(separator: " ").first.map(String.init) }
         let payload: [String: Any] = ["demande": request, "destinataire": recipient ?? "inconnu", "prenom_destinataire": first ?? "inconnu",
                                       "sujet": topic, "expediteur": user]
         return String(data: (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])) ?? Data(), encoding: .utf8) ?? "{}"
@@ -85,7 +87,7 @@ struct EmailDrafter {
 
     /// Brouillon sans IA : honnête sur ses limites.
     static func simplified(recipient: String?, topic: String, user: String) -> Content {
-        let first = recipient?.split(separator: " ").first.map(String.init)
+        let first = recipient.flatMap { $0.contains("@") ? nil : $0.split(separator: " ").first.map(String.init) }
         let subject = String(topic.prefix(60)).trimmingCharacters(in: .whitespacesAndNewlines)
         let sentence = topic.prefix(1).uppercased() + topic.dropFirst()
         return Content(subject: subject.isEmpty ? "Message" : subject.prefix(1).uppercased() + subject.dropFirst(),

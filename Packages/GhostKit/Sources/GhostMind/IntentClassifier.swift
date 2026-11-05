@@ -34,16 +34,18 @@ public enum IntentClassifier {
         if has(write + "|" + create, in: n), has(#"\b(document|lettre|compte rendu|compte-rendu|rapport|cv|devis|contrat|note de service|cahier des charges)\b"#, in: n),
            !has(#"\b(mail|e-mail|email|courriel)\b"#, in: n) { return .createDocument(brief: t) }
         if has(write, in: n), has(#"\b(mail|e-mail|email|courriel|message)\b"#, in: n) {
-            let who = capture(#"\b(?:mail|e-mail|email|courriel|message)\b.{0,12}?\b(?:à|a|au|pour)\s+(?<who>"# + name + #")"#, in: t, group: "who")
+            let who = capture(#"(?<who>[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+)"#, in: t, group: "who")
+                ?? capture(#"\b(?:mail|e-mail|email|courriel|message)\b.{0,12}?\b(?:à|a|au|pour)\s+(?<who>"# + name + #")"#, in: t, group: "who")
                 ?? capture(#"\b(?:à|a|au)\s+(?<who>"# + name + #")"#, in: t, group: "who")
-            var topic = capture(#"(?:\b(?:à|a|au)\s+"# + name + #"\s+|\bmail\s+|\bmessage\s+)(?<topic>(?:pour|afin de|en disant|en lui disant|que|concernant|à propos de)\b.+)$"#, in: t, group: "topic") ?? ""
+            var topic = capture(#"(?:\b(?:à|a|au)\s+(?:"# + name + #"|[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+)\s+|\bmail\s+|\bmessage\s+)(?<topic>(?:pour|afin de|en disant|en lui disant|que|concernant|à propos de)\b.+)$"#, in: t, group: "topic") ?? ""
             var stripped = true
             while stripped {
                 stripped = false
-                for lead in ["pour lui dire ", "en lui disant ", "en disant ", "afin de ", "pour ", "que ", "concernant ", "à propos de "] where topic.lowercased().hasPrefix(lead) {
+                for lead in ["pour lui dire ", "en lui disant ", "en disant ", "afin de ", "pour ", "que ", "qu'", "qu’", "concernant ", "à propos de "] where topic.lowercased().hasPrefix(lead) {
                     topic = String(topic.dropFirst(lead.count)); stripped = true; break
                 }
             }
+            topic = topic.replacingOccurrences(of: #"[\s,]*(?:stp|s'il te pla[iî]t|s'il vous pla[iî]t|please|merci)\s*$"#, with: "", options: [.regularExpression, .caseInsensitive])
             return .writeMessage(recipient: who, topic: topic.isEmpty ? t : topic)
         }
         if has(search, in: n), has(#"\b(bar|bars|restaurant|restaurants|resto|restos|club|clubs|salle|salles|cafe|cafes|hotel|hotels|boulangerie|pharmacie|cinema|musee|parc|brasserie|coiffeur|dentiste|medecin|spa|gym|boite|cave|librairie|fleuriste|garage|hopital|supermarche|magasin|terrasse|rooftop|activite|sortie)\b"#, in: n) {

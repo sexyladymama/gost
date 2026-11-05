@@ -36,13 +36,16 @@ enum TextTools {
     static func sentences(_ text: String) -> [String] {
         var result: [String] = []
         var current = ""
-        for character in text {
+        let characters = Array(text)
+        for (index, character) in characters.enumerated() {
             if character == "\n" {
                 result.append(current); current = ""
                 continue
             }
             current.append(character)
             if character == "." || character == "!" || character == "?" {
+                // Un point collé à la lettre suivante (adresse e-mail, site web, « 3.5 ») ne termine pas la phrase.
+                if character == ".", index + 1 < characters.count, characters[index + 1].isLetter || characters[index + 1].isNumber { continue }
                 result.append(current); current = ""
             }
         }
