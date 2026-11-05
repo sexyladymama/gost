@@ -6,6 +6,7 @@ import GhostContext
 import GhostBrain
 import GhostAutonomy
 import GhostVision
+import GhostMind
 import CoreGraphics
 
 /// Configure et pilote les sources de perception depuis l'interface.
@@ -42,6 +43,7 @@ final class PerceptionController {
     let brain: BrainCenter
     let execution: ExecutionCenter
     let calendar: CalendarCenter
+    let mind: MindCenter
     @ObservationIgnored let calendarWriter: CalendarWriter
     @ObservationIgnored private var executionAccess: [String: [SecurityScopedFolder]] = [:]
     @ObservationIgnored private let gateway: ModelGateway
@@ -91,6 +93,11 @@ final class PerceptionController {
         calendar = CalendarCenter(agent: CalendarAgent(writer: writer, trust: system.trust,
                                                        ledgerURL: persistent ? profile.directory.appendingPathComponent("calendar-actions.json") : nil),
                                   writer: writer)
+        // Intelligence qui rédige : le modèle intégré à macOS d'abord (sur le Mac), le modèle externe seulement s'il est activé.
+        let firstName = NSFullUserName().split(separator: " ").first.map(String.init) ?? NSUserName()
+        mind = MindCenter(engine: MindEngine(profile: profile, brain: brain.engine, context: context.engine, trust: system.trust,
+                                             models: [OnDeviceLanguageModel(), GatewayLanguageModel(gateway: gateway)],
+                                             sender: AppleMailSender(), userName: firstName, persistent: persistent))
         screenEnabled = defaults.bool(forKey: Keys.screenEnabled)
         calendarAutoAdd = defaults.bool(forKey: Keys.calendarAutoAdd)
         onboardingDone = defaults.bool(forKey: Keys.onboardingDone)
@@ -342,6 +349,12 @@ final class PerceptionController {
             try await center.attachConsumer(brain.engine)
         } catch { await brain.engine.report(error) }
         await brain.reload()
+        // GHOST comprend la demande et prépare le travail (brouillons de mail) ; il n'envoie jamais seul.
+        do {
+            await mind.engine.recoverInterrupted()
+            try await center.attachConsumer(mind.engine)
+        } catch { lastError = error.localizedDescription }
+        await mind.reload()
         // L'agent d'agenda reçoit les mêmes événements ; son registre persistant évite tout doublon au rejeu.
         do {
             await calendar.agent.recoverPending()

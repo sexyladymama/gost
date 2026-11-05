@@ -17,6 +17,13 @@
 	<!-- Mission 006 : ajout au calendrier de l'utilisateur (EventKit), après son consentement et celui de macOS. -->
 	<key>com.apple.security.personal-information.calendars</key>
 	<true/>
+	<!-- Mission 007 : envoi d'un mail rédigé, uniquement sur le clic « Envoyer », par l'application Mail (et elle seule). -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	<key>com.apple.security.temporary-exception.apple-events</key>
+	<array>
+		<string>com.apple.mail</string>
+	</array>
 	<key>com.apple.security.files.bookmarks.app-scope</key>
 	<true/>
 	<!-- Aucune autre autorisation : pas de caméra, micro, contacts,

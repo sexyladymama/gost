@@ -61,6 +61,11 @@
 		C00600000000000000000006 /* VisionPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00600000000000000000016 /* VisionPipelineTests.swift */; };
 		C00600000000000000000021 /* GhostVision in Frameworks */ = {isa = PBXBuildFile; productRef = C00600000000000000000031 /* GhostVision */; };
 		C00600000000000000000022 /* GhostVision in Frameworks */ = {isa = PBXBuildFile; productRef = C00600000000000000000032 /* GhostVision */; };
+		C00700000000000000000001 /* DraftsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00700000000000000000011 /* DraftsView.swift */; };
+		C00700000000000000000002 /* MindTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00700000000000000000012 /* MindTests.swift */; };
+		C00700000000000000000003 /* MindEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00700000000000000000013 /* MindEndToEndTests.swift */; };
+		C00700000000000000000021 /* GhostMind in Frameworks */ = {isa = PBXBuildFile; productRef = C00700000000000000000031 /* GhostMind */; };
+		C00700000000000000000022 /* GhostMind in Frameworks */ = {isa = PBXBuildFile; productRef = C00700000000000000000032 /* GhostMind */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -109,6 +114,9 @@
 		C00600000000000000000014 /* VisionTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionTestSupport.swift; sourceTree = "<group>"; };
 		C00600000000000000000015 /* VisionUnitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionUnitTests.swift; sourceTree = "<group>"; };
 		C00600000000000000000016 /* VisionPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionPipelineTests.swift; sourceTree = "<group>"; };
+		C00700000000000000000011 /* DraftsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftsView.swift; sourceTree = "<group>"; };
+		C00700000000000000000012 /* MindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindTests.swift; sourceTree = "<group>"; };
+		C00700000000000000000013 /* MindEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindEndToEndTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +130,7 @@
 				C00300000000000000000023 /* GhostBrain in Frameworks */,
 				C00500000000000000000021 /* GhostAutonomy in Frameworks */,
 				C00600000000000000000021 /* GhostVision in Frameworks */,
+				C00700000000000000000021 /* GhostMind in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -135,6 +144,7 @@
 				C00300000000000000000024 /* GhostBrain in Frameworks */,
 				C00500000000000000000022 /* GhostAutonomy in Frameworks */,
 				C00600000000000000000022 /* GhostVision in Frameworks */,
+				C00700000000000000000022 /* GhostMind in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -150,6 +160,7 @@
 				C00300000000000000000041 /* GhostContextTests */,
 				C00300000000000000000042 /* GhostBrainTests */,
 				C00600000000000000000041 /* GhostVisionTests */,
+				C00700000000000000000041 /* GhostMindTests */,
 				C00500000000000000000012 /* AutonomyTests.swift */,
 				113236722DEE1DC96F378B9D /* Products */,
 			);
@@ -189,6 +200,7 @@
 				C00300000000000000000011 /* ContextView.swift */,
 				C00600000000000000000011 /* AgendaView.swift */,
 				C00600000000000000000012 /* OnboardingView.swift */,
+				C00700000000000000000011 /* DraftsView.swift */,
 				C00500000000000000000011 /* AutonomyView.swift */,
 				C00300000000000000000014 /* GhostTheme.swift */,
 				C00300000000000000000015 /* MissionsView.swift */,
@@ -269,6 +281,16 @@
 			path = Packages/GhostKit/Tests/GhostVisionTests;
 			sourceTree = "<group>";
 		};
+		C00700000000000000000041 /* GhostMindTests */ = {
+			isa = PBXGroup;
+			children = (
+				C00700000000000000000012 /* MindTests.swift */,
+				C00700000000000000000013 /* MindEndToEndTests.swift */,
+			);
+			name = GhostMindTests;
+			path = Packages/GhostKit/Tests/GhostMindTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -292,6 +314,7 @@
 				C00300000000000000000033 /* GhostBrain */,
 				C00500000000000000000031 /* GhostAutonomy */,
 				C00600000000000000000031 /* GhostVision */,
+				C00700000000000000000031 /* GhostMind */,
 			);
 			productName = GhostShell;
 			productReference = 996AD237BC284D463E664FFE /* GhostShell.app */;
@@ -317,6 +340,7 @@
 				C00300000000000000000034 /* GhostBrain */,
 				C00500000000000000000032 /* GhostAutonomy */,
 				C00600000000000000000032 /* GhostVision */,
+				C00700000000000000000032 /* GhostMind */,
 			);
 			productName = GhostShellTests;
 			productReference = 50ED88076C07C90FF1B1A76B /* GhostShellTests.xctest */;
@@ -395,6 +419,7 @@
 				C00300000000000000000001 /* ContextView.swift in Sources */,
 				C00600000000000000000001 /* AgendaView.swift in Sources */,
 				C00600000000000000000002 /* OnboardingView.swift in Sources */,
+				C00700000000000000000001 /* DraftsView.swift in Sources */,
 				C00600000000000000000003 /* GhostHotKey.swift in Sources */,
 				C00500000000000000000001 /* AutonomyView.swift in Sources */,
 				C00300000000000000000004 /* GhostTheme.swift in Sources */,
@@ -432,6 +457,8 @@
 				C00600000000000000000004 /* VisionTestSupport.swift in Sources */,
 				C00600000000000000000005 /* VisionUnitTests.swift in Sources */,
 				C00600000000000000000006 /* VisionPipelineTests.swift in Sources */,
+				C00700000000000000000002 /* MindTests.swift in Sources */,
+				C00700000000000000000003 /* MindEndToEndTests.swift in Sources */,
 				A9C5458305CEF0EB2E3AE0CC /* GmailIntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -535,6 +562,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = GHOST;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "GHOST envoie par l'application Mail un message qu'il a rédigé, uniquement lorsque vous cliquez sur « Envoyer ».";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "GHOST ajoute à votre agenda les rendez-vous qu'il repère à l'écran (par exemple un dîner annoncé dans un message), après votre accord, et ne supprime que ce qu'il a lui-même ajouté.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "GHOST ajoute à votre agenda les rendez-vous qu'il repère à l'écran (par exemple un dîner annoncé dans un message), après votre accord, et ne supprime que ce qu'il a lui-même ajouté.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -565,6 +593,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = GHOST;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "GHOST envoie par l'application Mail un message qu'il a rédigé, uniquement lorsque vous cliquez sur « Envoyer ».";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "GHOST ajoute à votre agenda les rendez-vous qu'il repère à l'écran (par exemple un dîner annoncé dans un message), après votre accord, et ne supprime que ce qu'il a lui-même ajouté.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "GHOST ajoute à votre agenda les rendez-vous qu'il repère à l'écran (par exemple un dîner annoncé dans un message), après votre accord, et ne supprime que ce qu'il a lui-même ajouté.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -686,6 +715,8 @@
 		C00500000000000000000032 = {isa = XCSwiftPackageProductDependency; productName = GhostAutonomy; };
 		C00600000000000000000031 = {isa = XCSwiftPackageProductDependency; productName = GhostVision; };
 		C00600000000000000000032 = {isa = XCSwiftPackageProductDependency; productName = GhostVision; };
+		C00700000000000000000031 = {isa = XCSwiftPackageProductDependency; productName = GhostMind; };
+		C00700000000000000000032 = {isa = XCSwiftPackageProductDependency; productName = GhostMind; };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
