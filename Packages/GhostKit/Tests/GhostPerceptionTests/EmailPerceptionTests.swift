@@ -239,3 +239,26 @@ final class ImperativeRequestTests: XCTestCase {
                        "Excel garde la priorité sur Mail et Logo")
     }
 }
+
+/// Texte lu à l'écran : les vraies demandes passent avec de la marge, les libellés d'interface non.
+final class ScreenRequestThresholdTests: XCTestCase {
+    private func screenEvent(_ text: String) -> GhostEvent {
+        let source = EventSource(id: SourceID("screen"), kind: .screen, displayName: "Écran")
+        let snapshot = ScreenSnapshot(app: "WhatsApp", text: text, contentKey: text, capturedAt: referenceDate)
+        return UnderstandingEngine(deadlines: DeadlineExtractor(calendar: parisCalendar))
+            .interpret(EventNormalizer().normalize(.screen(snapshot), from: source), detectedAt: referenceDate)
+    }
+    func testRealRequestsSeenOnScreenBecomeMissionCandidatesWithMargin() {
+        for text in ["Trouve un club de boxe vers chez nous genre le 17", "Regarde les bars vers La Défense sympa",
+                     "Écris un mail à Paul pour décaler jeudi", "Crée un logo pour la boîte", "Cherche un resto pour samedi soir"] {
+            let e = screenEvent(text)
+            XCTAssertTrue(e.isMissionCandidate, text)
+            XCTAssertGreaterThanOrEqual(e.confidence, 0.78, "marge au-dessus du seuil de 0,75 : \(text)")
+        }
+    }
+    func testInterfaceLabelsAndOrdinaryTextAreNotRequests() {
+        for text in ["Recherche avancée dans les messages", "Commande n°1234 expédiée", "Note importante", "Rechercher dans Mail", "Il fait beau à Paris"] {
+            XCTAssertFalse(screenEvent(text).isMissionCandidate, text)
+        }
+    }
+}
