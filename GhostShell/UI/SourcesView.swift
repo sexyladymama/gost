@@ -86,22 +86,24 @@ struct SourcesView: View {
         }
         .formStyle(.grouped)
         .confirmationDialog("Révoquer l'accès e-mail ?", isPresented: $confirmEmailRevocation) {
-            Button("Révoquer et supprimer les événements et leur mémoire", role: .destructive) {
+            Button("Révoquer et effacer les données dérivées", role: .destructive) {
                 Task { await perception.removeEmailSource(deleteData: true) }
             }
-            Button("Révoquer, conserver événements et mémoire") {
+            Button("Révoquer, conserver l'historique") {
                 Task { await perception.removeEmailSource(deleteData: false, retainContext: true) }
             }
         } message: {
-            Text("GHOST cessera immédiatement de lire cette boîte. Pour Gmail, le jeton est révoqué auprès de Google et effacé du Trousseau.")
+            Text("GHOST cessera de lire cette boîte. L'effacement retire ses événements, sa mémoire et les missions qui en dépendent. La conservation garde cet historique. Pour Gmail, le jeton est révoqué auprès de Google et effacé du Trousseau.")
         }
         .confirmationDialog("Révoquer l'accès au dossier ?", isPresented: $confirmFolderRevocation) {
-            Button("Révoquer et supprimer les événements et leur mémoire", role: .destructive) {
+            Button("Révoquer et effacer les données dérivées", role: .destructive) {
                 Task { await perception.removeFolderSource(deleteData: true) }
             }
-            Button("Révoquer, conserver événements et mémoire") {
+            Button("Révoquer, conserver l'historique") {
                 Task { await perception.removeFolderSource(deleteData: false, retainContext: true) }
             }
+        } message: {
+            Text("L'effacement retire les événements, la mémoire et les missions dépendant de ce dossier. La conservation garde cet historique. Aucun document du dossier n'est supprimé.")
         }
     }
 }

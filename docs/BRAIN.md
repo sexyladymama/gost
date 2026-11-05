@@ -46,7 +46,7 @@ Source autorisée ─► PERCEPTION ─► CONTEXT ─► BRAIN ─► GHOST SHE
 - une intention **vague** (« Il faudrait qu'on regarde ça prochainement ») → `MONITOR` + question de clarification, pas de mission ferme ;
 - **doublon** (même fil, ou même demandeur et sujet proche) → mise à jour ou `IGNORE`, jamais deux missions ;
 - une **annulation** ne vaut que si elle vient du demandeur d'origine ;
-- une mission n'est terminée que sur **preuves** (accusé de réception du demandeur, ou fichier conforme avec ≥ 3 indices) ;
+- une mission peut être terminée sur accusé de réception du demandeur ; les seules métadonnées d'un fichier, même avec ≥ 3 indices, restent un résultat possible à vérifier et ne terminent jamais une mission ;
 - une demande rejetée par l'utilisateur n'est pas recréée (clé supprimée, visible dans l'historique).
 
 ### Priorité
@@ -70,6 +70,13 @@ qu'après **confirmation de l'utilisateur** et sans blocage. `IN_PROGRESS` n'est
   Une panne avant l'écriture ne laisse rien de partiel ; la reprise rejoue sans doublon.
 - **Pause / arrêt** : le Brain est désactivé (`setActive(false)`) ; les événements arrivés sont comptés (`deferredCount`) mais pas
   traités. À la reprise, `catchUp` rejoue ceux non encore analysés.
+- Une révision du stockage invalide les analyses suspendues lors d'une pause,
+  révocation, suppression ou correction concurrente. La transaction refuse les
+  résultats calculés à partir d'un état devenu périmé et les doublons simultanés.
+- Sans conservation explicite, la révocation retire aussi les décisions,
+  corrections, clés de rejet et missions dérivées de la source (y compris via
+  une ressource). Une mission mêlant plusieurs sources est retirée en entier
+  pour ne pas laisser de résumé ou d'historique issu de la source supprimée.
 - Une échéance **remplacée** reste dans `deadlineClaims` (marquée `superseded`) ; deux sources divergentes → **aucune échéance
   définitive**, mission à clarifier. L'historique n'est jamais réécrit (testé : l'ancien historique est un préfixe du nouveau).
 - **Réévaluation** (`reevaluate`) : recalcule priorité, plan et blocages quand le temps passe ou qu'une autorisation est accordée.
@@ -86,6 +93,12 @@ de preuve supplémentaires et Context une sauvegarde différentielle (voir ci-de
 
 - Interface commune `ModelProvider` ; passerelle `ModelGateway` : liste ordonnée (repli), délai, plafonds **200 appels et 200 000 jetons
   par jour**, journal technique **sans contenu**.
+- Les appels sont réservés avant l'attente réseau et chaque fournisseur de repli
+  revérifie le plafond. Dans l'application, `model-usage.json` conserve les
+  compteurs techniques par profil entre les lancements ; un suivi illisible
+  ou impossible à sauvegarder bloque les appels. Le seuil de jetons est contrôlé
+  avant chaque appel à partir des usages déjà reçus : une réponse en cours peut
+  le dépasser. Il ne constitue pas un plafond de facturation côté fournisseur.
 - **Fournisseur réel : `AnthropicProvider`** (API Messages, modèle `claude-haiku-5-5` par défaut). **Désactivé par défaut.**
 - **Fournisseur simulé : `SimulatedModelProvider`** — règles locales, *jamais* une IA ; réservé aux tests ; toute décision qui l'utilise est
   marquée « SIMULÉ ».

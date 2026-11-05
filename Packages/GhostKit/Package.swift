@@ -22,8 +22,10 @@ let package = Package(
         .library(name: "GhostKit", targets: ["GhostKit"]),
         .library(name: "GhostPerception", targets: ["GhostPerception"]),
         .library(name: "GhostContext", targets: ["GhostContext"]),
-        .library(name: "GhostBrain", targets: ["GhostBrain"])
+        .library(name: "GhostBrain", targets: ["GhostBrain"]),
+        .library(name: "GhostAutonomy", targets: ["GhostAutonomy"])
     ],
+    dependencies: [.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20")],
     targets: [
         .systemLibrary(name: "CSQLite", pkgConfig: "sqlite3"),
         .target(name: "GhostKit"),
@@ -33,6 +35,8 @@ let package = Package(
         .target(name: "GhostContext", dependencies: ["GhostPerception", "CSQLite"]),
         .testTarget(name: "GhostContextTests", dependencies: ["GhostContext"]),
         .target(name: "GhostBrain", dependencies: ["GhostPerception", "GhostContext"]),
-        .testTarget(name: "GhostBrainTests", dependencies: ["GhostBrain", "GhostPerception", "GhostContext"])
+        .testTarget(name: "GhostBrainTests", dependencies: ["GhostBrain", "GhostPerception", "GhostContext"]),
+        .target(name: "GhostAutonomy", dependencies: ["GhostBrain", "GhostPerception", .product(name: "ZIPFoundation", package: "ZIPFoundation")]),
+        .testTarget(name: "GhostAutonomyTests", dependencies: ["GhostAutonomy", "GhostContext"])
     ]
 )

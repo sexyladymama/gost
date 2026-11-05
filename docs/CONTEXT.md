@@ -45,6 +45,9 @@ ContextCenter (@Observable) ◄── updates ── ContextEngine      ──�
 - Un chemin de fichier qui correspond à plusieurs projets → association *inconnue*.
 - Plusieurs échéances pour une même demande → toutes conservées ; la plus
   récente assertion prévaut ; des échéances simultanées contradictoires sont signalées.
+- Si un deuxième document porte le même nom, un rapprochement automatique
+  auparavant unique est rétracté. Les liens explicitement confirmés par
+  l'utilisateur sont préservés.
 - Le résumé d'un projet liste **ce que GHOST ne sait pas** (périmètre, livrable, échéance, document).
 
 ## Interface

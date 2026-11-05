@@ -47,7 +47,10 @@ public actor BrainEngine: PerceptionEventConsumer {
     // MARK: Cycle de vie
 
     /// Pause / arrêt : plus aucun traitement proactif. Les missions enregistrées restent intactes.
-    public func setActive(_ active: Bool) { isActive = active }
+    public func setActive(_ active: Bool) async {
+        isActive = active
+        if !active { await store.invalidateProcessing() }
+    }
 
     public func consume(_ events: [GhostEvent]) async {
         guard isActive else { deferredCount += events.count; return }
@@ -68,6 +71,7 @@ public actor BrainEngine: PerceptionEventConsumer {
 
     @discardableResult
     public func process(_ events: [GhostEvent]) async throws -> [DecisionRecord] {
+        guard isActive else { deferredCount += events.count; return [] }
         _ = try await store.snapshot()   // échoue ici si le stockage est illisible
         var records: [DecisionRecord] = []
         let ordered = events.sorted { ($0.occurredAt, $0.id.uuidString) < ($1.occurredAt, $1.id.uuidString) }
@@ -81,12 +85,13 @@ public actor BrainEngine: PerceptionEventConsumer {
         for event in ordered {
             guard isActive else { break }
             do { if let record = try await processOne(event) { records.append(record) } }
+            catch BrainError.staleProcessing { continue }
             catch { report(error) }
         }
         // Le recalcul lié au temps (priorités, blocages) coûte O(missions) : une fois par quart d'heure,
         // et à la demande. Les missions touchées par un événement sont déjà recalculées par leur mise à jour.
         let now = clock()
-        if lastReevaluation == nil || now.timeIntervalSince(lastReevaluation!) >= Self.reevaluationInterval {
+        if isActive && (lastReevaluation == nil || now.timeIntervalSince(lastReevaluation!) >= Self.reevaluationInterval) {
             do { try await reevaluate() } catch { report(error) }
         }
         await publish()
@@ -94,6 +99,8 @@ public actor BrainEngine: PerceptionEventConsumer {
     }
 
     private func processOne(_ event: GhostEvent) async throws -> DecisionRecord? {
+        let epoch = await store.currentProcessingEpoch()
+        guard isActive else { return nil }
         guard try await store.snapshot().ledger[Self.ledgerKey(event)] == nil else { return nil }
         try await context.ingest([event])                       // contexte enrichi avant toute décision
         let graph = try await context.snapshot()
@@ -106,19 +113,26 @@ public actor BrainEngine: PerceptionEventConsumer {
         if let consulted = await consultModel(input, outcome) {
             outcome = consulted.outcome; engine = "rules+model"; provider = consulted.provider; simulated = consulted.simulated
         }
+        guard isActive else { return nil }
+        try await trust.require(event.source.id, event.source.kind == .email ? .readMail : .watchFolder,
+                                operation: "brain.commit", target: event.source.displayName)
         let record = DecisionRecord(date: input.now, kind: outcome.kind, missionID: outcome.missionID, eventIDs: [event.id],
                                     usedElements: outcome.used, reasons: outcome.reasons, confidence: outcome.confidence,
                                     alternatives: outcome.alternatives, uncertainties: outcome.uncertainties,
                                     engine: engine, modelProvider: provider, modelIsSimulated: simulated)
         let key = Self.ledgerKey(event)
         do {
-            try await store.commit { try Self.apply(outcome, input: input, record: record, key: key, to: &$0) }
+            try await store.commit(expectedEpoch: epoch) {
+                guard $0.ledger[key] == nil else { throw BrainError.staleProcessing }
+                try Self.apply(outcome, input: input, record: record, key: key, to: &$0)
+            }
         } catch {
+            if case BrainError.staleProcessing = error { return nil }
             guard case BrainError.invalid(let problems) = error else { throw error }
             // Invariant violé : on le journalise sans réessayer indéfiniment.
             var failed = record
             failed.kind = .ignore; failed.reasons = ["Décision abandonnée : \(problems)"]
-            try await store.commit {
+            try await store.commit(expectedEpoch: epoch) {
                 $0.ledger[key] = LedgerEntry(eventID: event.id, decisionID: failed.id, kind: .ignore, processedAt: input.now)
                 $0.decisions.append(failed)
             }
@@ -183,6 +197,7 @@ public actor BrainEngine: PerceptionEventConsumer {
 
     /// Recalcule priorités, plans et blocages (temps écoulé, nouvelles autorisations).
     public func reevaluate() async throws {
+        let epoch = await store.currentProcessingEpoch()
         let grants = await GrantSnapshot.load(from: trust)
         let now = clock()
         lastReevaluation = now
@@ -195,7 +210,7 @@ public actor BrainEngine: PerceptionEventConsumer {
             if Self.signature(m) != before { changed[id] = m }
         }
         guard !changed.isEmpty else { return }
-        try await store.commit { for (id, m) in changed { $0.missions[id] = m } }
+        try await store.commit(expectedEpoch: epoch) { for (id, m) in changed { $0.missions[id] = m } }
     }
 
     static func signature(_ m: Mission) -> String {
@@ -308,13 +323,51 @@ public actor BrainEngine: PerceptionEventConsumer {
 
     // MARK: Données, révocation, reprise
 
+    /// Retour du moteur local : seule la préparation est réalisée, jamais la remise externe.
+    public func recordVerifiedLocalArtifact(missionID: String, executionID: String, fileName: String, hash: String, verification: [String]) async throws {
+        guard !verification.isEmpty, !hash.isEmpty, !fileName.contains("/") else { throw BrainError.invalid("Rapport de vérification invalide.") }
+        try await store.commit { state in
+            guard var mission = state.missions[missionID], mission.isOpen, mission.verdict == .confirmed else { throw BrainError.unknownMission }
+            let key = "local-artifact:" + executionID
+            guard !mission.history.contains(where: { $0.kind == key }) else { return }
+            for i in mission.plan.steps.indices where ["gather", "build", "check"].contains(mission.plan.steps[i].key) {
+                mission.plan.steps[i].state = .completed
+            }
+            if let i = mission.plan.steps.firstIndex(where: { $0.key == "validate" }) { mission.plan.steps[i].state = .ready }
+            mission.history.append(HistoryEntry(date: self.clock(), kind: key,
+                summary: "Livrable local créé et vérifié : \(fileName). Empreinte : \(hash). Validation et remise externe non réalisées."))
+            mission.updatedAt = self.clock()
+            state.missions[missionID] = mission
+        }
+        await publish()
+    }
+
+    /// Trace d'un événement d'exécution (pause, annulation, approbation requise, refus, échec) dans l'historique de la mission.
+    /// N'altère ni l'état ni le plan : seul le Brain décide de l'état d'une mission, l'exécution ne fait que rendre compte.
+    /// Une même trace consécutive n'est pas répétée (reprise, rejeu).
+    public func recordExecutionEvent(missionID: String, executionID: String, kind: String, summary: String) async throws {
+        guard !executionID.isEmpty, !summary.isEmpty, summary.count <= 1_000,
+              ["paused", "cancelled", "approval", "denied", "failed"].contains(kind) else { throw BrainError.invalid("Événement d'exécution invalide.") }
+        try await store.commit { state in
+            guard var mission = state.missions[missionID] else { throw BrainError.unknownMission }
+            let key = "execution-\(kind):" + executionID
+            if let last = mission.history.last, last.kind == key, last.summary == summary { return }
+            mission.history.append(HistoryEntry(date: self.clock(), kind: key, summary: summary))
+            mission.updatedAt = self.clock()
+            state.missions[missionID] = mission
+        }
+        await publish()
+    }
+
     public func deleteMemory() async throws {
+        await store.invalidateProcessing()
         try await store.reset()
         deferredCount = 0; lastError = nil
         await publish()
     }
 
     public func sourceWasRevoked(_ source: SourceID, retainHistory: Bool) async throws {
+        await store.invalidateProcessing()
         try await store.commit { state in
             if retainHistory { state.retainedSources.insert(source.rawValue); return }
             state.retainedSources.remove(source.rawValue)
@@ -329,21 +382,36 @@ public actor BrainEngine: PerceptionEventConsumer {
         let state = try await store.snapshot()
         let sources = Set(state.missions.values.flatMap { $0.triggers.map(\.sourceID) })
             .union(state.watches.values.map(\.sourceID))
+            .union(state.missions.values.flatMap { $0.resources.compactMap(\.sourceID) })
+            .union(state.ledger.keys.compactMap { $0.split(separator: "|", maxSplits: 1).first.map(String.init) })
         let revoked = sources.filter { grants.grants[$0] == nil && !state.retainedSources.contains($0) }
         guard !revoked.isEmpty else { return }
+        await store.invalidateProcessing()
         try await store.commit { state in for s in revoked { Self.purge(source: s, from: &state) } }
         await publish()
     }
 
     static func purge(source: String, from state: inout BrainState) {
-        for (id, var m) in state.missions {
-            guard m.triggers.contains(where: { $0.sourceID == source }) else { continue }
-            m.triggers.removeAll { $0.sourceID == source }
-            m.deadlineClaims.removeAll { $0.sourceID == source }
-            if m.triggers.isEmpty { state.missions[id] = nil } else { state.missions[id] = m }
+        // Une mission contient des résumés, croyances et historiques dérivés :
+        // retirer seulement son déclencheur laisserait ces informations en mémoire.
+        let affected = state.missions.values.filter {
+            $0.originSourceID == source || $0.triggers.contains { $0.sourceID == source }
+                || $0.resources.contains { $0.sourceID == source }
         }
+        let missionIDs = Set(affected.map(\.id))
+        let eventIDs = Set(state.ledger.filter { $0.key.hasPrefix(source + "|") }.values.map(\.eventID))
+            .union(affected.flatMap { $0.triggers.filter { $0.sourceID == source }.map(\.eventID) })
+            .union(state.watches.values.filter { $0.sourceID == source }.map(\.eventID))
+        let keys = Set(affected.map(\.dedupeKey))
+        state.missions = state.missions.filter { !missionIDs.contains($0.key) }
+        let decisions = Set(state.decisions.filter { record in
+            record.missionID.map { missionIDs.contains($0) } == true || !eventIDs.isDisjoint(with: record.eventIDs)
+        }.map(\.id))
+        state.decisions.removeAll { decisions.contains($0.id) }
+        state.feedback.removeAll { missionIDs.contains($0.missionID) }
+        state.suppressedKeys.subtract(keys)
         state.watches = state.watches.filter { $0.value.sourceID != source }
-        state.ledger = state.ledger.filter { !$0.key.hasPrefix(source + "|") }
+        state.ledger = state.ledger.filter { !$0.key.hasPrefix(source + "|") && !decisions.contains($0.value.decisionID) }
     }
 
     public func report(_ error: any Error) {

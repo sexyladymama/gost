@@ -506,3 +506,171 @@ final class MissionStoreTests: XCTestCase {
         XCTAssertNotEqual(_a24, "x")
     }
 }
+
+// MARK: - Régressions de l'audit des Missions 003/004
+
+private actor AuditModelGate {
+    private var entered = 0
+    private var opened = false
+    private var pending: [CheckedContinuation<Void, Never>] = []
+    private var observers: [(Int, CheckedContinuation<Void, Never>)] = []
+    func hold() async {
+        entered += 1
+        let ready = observers.filter { entered >= $0.0 }
+        observers.removeAll { entered >= $0.0 }
+        ready.forEach { $0.1.resume() }
+        if opened { return }
+        await withCheckedContinuation { pending.append($0) }
+    }
+    func waitForEntry(_ count: Int = 1) async {
+        if entered >= count { return }
+        await withCheckedContinuation { observers.append((count, $0)) }
+    }
+    func release() { opened = true; let all = pending; pending.removeAll(); all.forEach { $0.resume() } }
+}
+
+final class BrainAuditRegressionTests: XCTestCase {
+    private func assertInvalidatedAnalysis(_ action: String) async throws {
+        let gate = AuditModelGate()
+        let provider = SimulatedModelProvider { _ in
+            await gate.hold()
+            return #"{"verdict":"monitor","confidence":0.9,"reason":"Avis de test"}"#
+        }
+        let gateway = ModelGateway(providers: [provider], policy: GatewayPolicy(enabled: true, timeout: 5))
+        let env = try await BrainEnv.make(gateway: gateway)
+        let event = env.mail(subject: "Idée confidentielle", body: "Il faudrait qu'on regarde ça prochainement.")
+        let processing = Task { try await env.brain.process([event]) }
+        await gate.waitForEntry()
+        switch action {
+        case "pause": await env.brain.setActive(false)
+        case "revoke":
+            await env.trust.revoke(mailSrc.id)
+            try await env.brain.sourceWasRevoked(mailSrc.id, retainHistory: false)
+        default: try await env.brain.deleteMemory()
+        }
+        await gate.release()
+        _ = try await processing.value
+        let state = try await env.state()
+        XCTAssertTrue(state.missions.isEmpty)
+        XCTAssertTrue(state.watches.isEmpty, "Une analyse invalidée ne doit pas recréer une surveillance")
+        XCTAssertTrue(state.decisions.isEmpty, "Une analyse invalidée ne doit pas enregistrer de décision")
+        XCTAssertTrue(state.ledger.isEmpty)
+    }
+    func testPauseInvalidatesModelAnalysisAlreadyInFlight() async throws { try await assertInvalidatedAnalysis("pause") }
+    func testRevocationInvalidatesModelAnalysisAlreadyInFlight() async throws { try await assertInvalidatedAnalysis("revoke") }
+    func testDeletionInvalidatesModelAnalysisAlreadyInFlight() async throws { try await assertInvalidatedAnalysis("delete") }
+
+    func testRevocationPurgesDecisionsFeedbackAndRejectedKeys() async throws {
+        let env = try await BrainEnv.make()
+        let event = env.mail(subject: "Rapport confidentiel", body: requestExcel, thread: "audit-secret-thread")
+        _ = try await env.brain.process([event])
+        let initial = try await env.missions()
+        let mission = try XCTUnwrap(initial.first)
+        try await env.brain.addNote(mission.id, text: "audit-note-secret")
+        try await env.brain.reject(mission.id, reason: "audit-rejection-secret")
+        await env.trust.revoke(mailSrc.id)
+        try await env.brain.sourceWasRevoked(mailSrc.id, retainHistory: false)
+        let state = try await env.state()
+        XCTAssertTrue(state.missions.isEmpty)
+        XCTAssertTrue(state.decisions.isEmpty)
+        XCTAssertTrue(state.feedback.isEmpty)
+        XCTAssertTrue(state.suppressedKeys.isEmpty)
+        let encoded = String(decoding: try JSONEncoder().encode(state), as: UTF8.self)
+        XCTAssertFalse(encoded.contains("audit-note-secret"))
+        XCTAssertFalse(encoded.contains("audit-rejection-secret"))
+    }
+
+    func testFallbackCannotExceedDailyCallBudget() async throws {
+        let failing = SimulatedModelProvider { _ in throw ModelError.providerFailed("panne fictive") }
+        let gateway = ModelGateway(providers: [failing, failing], policy: GatewayPolicy(enabled: true, maxCallsPerDay: 1))
+        do { _ = try await gateway.complete(ModelRequest(task: .refineAmbiguity, system: "s", user: "u")) } catch {}
+        let log = await gateway.callLog
+        XCTAssertEqual(log.count, 1, "Le fournisseur de repli doit aussi respecter le plafond")
+    }
+
+    func testConcurrentRequestsReserveCallBudgetBeforeAwaiting() async throws {
+        let gate = AuditModelGate()
+        let provider = SimulatedModelProvider { _ in await gate.hold(); return "{}" }
+        let gateway = ModelGateway(providers: [provider], policy: GatewayPolicy(enabled: true, maxCallsPerDay: 1))
+        let first = Task { try await gateway.complete(ModelRequest(task: .refineAmbiguity, system: "s", user: "premier")) }
+        await gate.waitForEntry()
+        let second = Task { try? await gateway.complete(ModelRequest(task: .refineAmbiguity, system: "s", user: "second")) }
+        // Laisse l'appel concurrent terminer (refus) ou atteindre le fournisseur.
+        for _ in 0..<100 { await Task.yield() }
+        await gate.release()
+        _ = try await first.value
+        let response = await second.value
+        XCTAssertNil(response)
+        let log = await gateway.callLog
+        XCTAssertEqual(log.count, 1)
+    }
+}
+
+final class ModelBudgetPersistenceAuditTests: XCTestCase {
+    func testRestartDoesNotResetDailyCallBudget() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ghost-budget-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("usage.json")
+        let policy = GatewayPolicy(enabled: true, maxCallsPerDay: 1)
+        let request = ModelRequest(task: .refineAmbiguity, system: "s", user: "donnée fictive")
+        let provider = SimulatedModelProvider()
+        let first = ModelGateway(providers: [provider], policy: policy, clock: { brainNow }, usageURL: url)
+        _ = try await first.complete(request)
+        let restarted = ModelGateway(providers: [provider], policy: policy, clock: { brainNow }, usageURL: url)
+        do { _ = try await restarted.complete(request); XCTFail("Le budget doit survivre au redémarrage") }
+        catch { guard case ModelError.budgetExceeded = error else { return XCTFail("\(error)") } }
+        let log = await restarted.callLog
+        XCTAssertTrue(log.isEmpty)
+        let nextDay = ModelGateway(providers: [provider], policy: policy, clock: { brainNow.addingTimeInterval(86_400) }, usageURL: url)
+        _ = try await nextDay.complete(request)
+        let dump = try String(contentsOf: url)
+        XCTAssertFalse(dump.contains("donnée fictive"))
+    }
+
+    func testCorruptQuotaFileIsPreservedAndBlocksProvider() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ghost-quota-\(UUID()).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let bytes = Data("fichier invalide à préserver".utf8)
+        try bytes.write(to: url)
+        let provider = SimulatedModelProvider { _ in XCTFail("Aucun appel sans suivi de quotas fiable"); return "{}" }
+        let gateway = ModelGateway(providers: [provider], policy: GatewayPolicy(enabled: true), usageURL: url)
+        do { _ = try await gateway.complete(ModelRequest(task: .refineAmbiguity, system: "s", user: "u")); XCTFail() } catch {}
+        XCTAssertEqual(try Data(contentsOf: url), bytes)
+    }
+}
+
+final class BrainIsolationAuditTests: XCTestCase {
+    func testSimulatedPreferenceNeverInfluencesRealContext() async throws {
+        let env = try await BrainEnv.make()
+        let simulatedSource = EventSource(id: mailSrc.id, kind: .email, displayName: "Simulation", isSimulated: true)
+        let simulatedEvent = env.mail(subject: "[Projet: Atlas] Simulation", body: requestExcel, thread: "sim", source: simulatedSource)
+        try await env.context.ingest([simulatedEvent])
+        let simulatedGraph = try await env.context.snapshot()
+        let project = try XCTUnwrap(simulatedGraph.nodes.values.first { $0.kind == .project && $0.isSimulated })
+        _ = try await env.context.remember(kind: .preference, text: "Marie : priorité élevée", scope: .professional, projectID: project.id)
+        let realEvent = env.mail(subject: "[Projet: Atlas] Réel", body: requestExcel, thread: "real")
+        try await env.context.ingest([realEvent])
+        let graph = try await env.context.snapshot()
+        let realLens = ContextLens(graph: graph, event: realEvent)
+        XCTAssertTrue(realLens.preferences(matching: ["Marie"]).isEmpty)
+        let simulatedLens = ContextLens(graph: graph, event: simulatedEvent)
+        XCTAssertEqual(simulatedLens.preferences(matching: ["Marie"]).count, 1)
+    }
+}
+
+final class BrainCompletionEvidenceAuditTests: XCTestCase {
+    func testFileMetadataAloneCannotCompleteMission() async throws {
+        let env = try await BrainEnv.make()
+        _ = try await env.brain.process([env.file("resultats_commerciaux_source.xlsx")])
+        _ = try await env.brain.process([env.mail(subject: "Résultats commerciaux", body: requestExcel, thread: "completion-audit")])
+        let missions = try await env.missions()
+        let mission = try XCTUnwrap(missions.first)
+        XCTAssertFalse(mission.missingInfo.contains { $0.severity == .block })
+        env.clock.advance(10)
+        let decisions = try await env.brain.process([env.file("resultats_commerciaux_final.xlsx")])
+        let current = try await env.state()
+        XCTAssertNotEqual(decisions.last?.kind, .completeMission, "Un nom et une extension ne prouvent pas que le contenu est correct")
+        XCTAssertNotEqual(current.missions[mission.id]?.state, .completed)
+        XCTAssertEqual(decisions.last?.kind, .updateMission)
+    }
+}

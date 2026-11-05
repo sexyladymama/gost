@@ -482,12 +482,13 @@ public struct BrainConfig: Sendable {
 }
 
 public enum BrainError: Error, LocalizedError, Sendable {
-    case storage(String), invalid(String), unknownMission, illegalTransition(from: MissionState, to: MissionState)
+    case storage(String), invalid(String), unknownMission, staleProcessing, illegalTransition(from: MissionState, to: MissionState)
     public var errorDescription: String? {
         switch self {
         case .storage(let s): return "Cerveau : \(s)"
         case .invalid(let s): return s
         case .unknownMission: return "Mission introuvable."
+        case .staleProcessing: return "Analyse interrompue par un changement d'état."
         case .illegalTransition(let a, let b): return "Transition impossible : \(a.label) → \(b.label)."
         }
     }

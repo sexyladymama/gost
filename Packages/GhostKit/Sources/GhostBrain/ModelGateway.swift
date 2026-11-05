@@ -83,6 +83,12 @@ public struct ModelCallLog: Codable, Sendable, Hashable, Identifiable {
 /// Passerelle vers les modèles : fournisseurs ordonnés (repli), délai, plafonds
 /// de coût (appels et jetons par jour), journal technique.
 public actor ModelGateway {
+    private struct BudgetState: Codable {
+        var schemaVersion = 1
+        var dayKey: String
+        var calls: Int
+        var tokens: Int
+    }
     private var providers: [ModelProvider]
     public private(set) var policy: GatewayPolicy
     private let clock: @Sendable () -> Date
@@ -91,10 +97,26 @@ public actor ModelGateway {
     private var dayKey = ""
     private var callsToday = 0
     private var tokensToday = 0
+    private let usageURL: URL?
+    private var budgetFailure: ModelError?
 
     public init(providers: [ModelProvider], policy: GatewayPolicy = GatewayPolicy(),
-                calendar: Calendar = .current, clock: @escaping @Sendable () -> Date = { Date() }) {
+                calendar: Calendar = .current, clock: @escaping @Sendable () -> Date = { Date() }, usageURL: URL? = nil) {
         self.providers = providers; self.policy = policy; self.calendar = calendar; self.clock = clock
+        self.usageURL = usageURL
+        if let usageURL {
+            do {
+                let saved = try JSONDecoder().decode(BudgetState.self, from: Data(contentsOf: usageURL))
+                guard saved.schemaVersion == 1, saved.calls >= 0, saved.tokens >= 0 else {
+                    throw ModelError.providerFailed("suivi des quotas invalide")
+                }
+                dayKey = saved.dayKey; callsToday = saved.calls; tokensToday = saved.tokens
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+                // Premier lancement : aucun appel n'a encore été réservé.
+            } catch {
+                budgetFailure = .providerFailed("suivi des quotas illisible ; fichier conservé et appels bloqués")
+            }
+        }
     }
 
     public func setPolicy(_ policy: GatewayPolicy) { self.policy = policy }
@@ -104,23 +126,35 @@ public actor ModelGateway {
 
     public func complete(_ request: ModelRequest) async throws -> ModelResponse {
         guard policy.enabled else { throw ModelError.disabled }
+        if let budgetFailure { throw budgetFailure }
         guard !providers.isEmpty else { throw ModelError.noProvider }
         rollDay()
         guard callsToday < policy.maxCallsPerDay else { throw ModelError.budgetExceeded("appels quotidiens") }
         guard tokensToday < policy.maxTokensPerDay else { throw ModelError.budgetExceeded("jetons quotidiens") }
         var lastError: Error = ModelError.noProvider
         for provider in providers {
+            guard policy.enabled else { throw ModelError.disabled }
+            rollDay()
+            guard callsToday < policy.maxCallsPerDay else { throw ModelError.budgetExceeded("appels quotidiens") }
+            guard tokensToday < policy.maxTokensPerDay else { throw ModelError.budgetExceeded("jetons quotidiens") }
+            // Réserver avant le premier await : les autres appels de l'actor
+            // et les fournisseurs de repli partagent le même plafond.
+            callsToday += 1
+            do { try persistBudget() }
+            catch { callsToday -= 1; throw error }
             let start = clock()
             do {
                 let response = try await withTimeout(policy.timeout) { try await provider.complete(request) }
-                callsToday += 1
-                tokensToday += response.usage.inputTokens + response.usage.outputTokens
+                let usage = Self.saturatingAdd(max(0, response.usage.inputTokens), max(0, response.usage.outputTokens))
+                tokensToday = Self.saturatingAdd(tokensToday, usage)
+                try persistBudget()
+                guard policy.enabled else { throw ModelError.disabled }
                 record(provider, request, usage: response.usage, since: start, outcome: "ok")
                 return response
             } catch {
-                callsToday += 1
                 record(provider, request, usage: nil, since: start, outcome: Self.outcome(error))
                 lastError = error
+                if let budgetFailure { throw budgetFailure }
                 continue   // stratégie de repli : fournisseur suivant
             }
         }
@@ -136,6 +170,24 @@ public actor ModelGateway {
             }
         }
         return (error as? PerceptionError) != nil ? "network-denied" : "error"
+    }
+
+    private static func saturatingAdd(_ a: Int, _ b: Int) -> Int {
+        let (sum, overflow) = a.addingReportingOverflow(b)
+        return overflow ? Int.max : sum
+    }
+
+    private func persistBudget() throws {
+        guard let usageURL else { return }
+        do {
+            try FileManager.default.createDirectory(at: usageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let state = BudgetState(dayKey: dayKey, calls: callsToday, tokens: tokensToday)
+            try JSONEncoder().encode(state).write(to: usageURL, options: .atomic)
+        } catch {
+            let failure = ModelError.providerFailed("impossible de sauvegarder les quotas ; appels bloqués")
+            budgetFailure = failure
+            throw failure
+        }
     }
 
     private func rollDay() {

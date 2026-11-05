@@ -11,6 +11,7 @@ import Foundation
 public actor MissionStore {
     private let url: URL?
     private var state: BrainState?
+    private var processingEpoch: UInt64 = 0
     /// Pour les tests : nombre d'écritures à faire échouer.
     var failNextSaves = 0
 
@@ -23,14 +24,20 @@ public actor MissionStore {
         return loaded
     }
 
-    public func commit(_ transform: (inout BrainState) throws -> Void) throws {
+    public func commit(expectedEpoch: UInt64? = nil, _ transform: (inout BrainState) throws -> Void) throws {
+        if let expectedEpoch, expectedEpoch != processingEpoch { throw BrainError.staleProcessing }
         var candidate = try snapshot()
         try transform(&candidate)
         try write(candidate)
         state = candidate
+        processingEpoch &+= 1
     }
 
+    func currentProcessingEpoch() -> UInt64 { processingEpoch }
+    func invalidateProcessing() { processingEpoch &+= 1 }
+
     public func reset() throws {
+        processingEpoch &+= 1
         let fresh = BrainState()
         try write(fresh)
         state = fresh

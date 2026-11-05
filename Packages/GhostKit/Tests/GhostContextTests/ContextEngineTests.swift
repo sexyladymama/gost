@@ -278,3 +278,39 @@ final class ContextEngineTests: XCTestCase {
     }
 }
 
+
+final class ContextAuditRegressionTests: XCTestCase {
+    func testSecondDocumentWithSameNameRetractsAutomaticReference() async throws {
+        let (engine, _) = try await makeContext()
+        try await engine.setScope(.professional, for: mailSource.id)
+        try await engine.setScope(.professional, for: folderSource.id)
+        let real = makeMailEvent(source: realMailSource, title: "Lire rapport.xlsx", summary: "Voir rapport.xlsx", action: "Lire rapport.xlsx")
+        try await engine.ingest([makeFileEvent(name: "rapport.xlsx", path: "A/rapport.xlsx"), real])
+        let before = try await engine.snapshot()
+        let eventID = try XCTUnwrap(before.nodes(of: .event).first { $0.properties["eventID"] == real.id.uuidString }?.id)
+        XCTAssertEqual(before.relations(of: .eventReferencesDocument).filter { $0.from == eventID }.count, 1)
+        try await engine.ingest([makeFileEvent(name: "rapport.xlsx", path: "B/rapport.xlsx")])
+        let after = try await engine.snapshot()
+        XCTAssertTrue(after.relations(of: .eventReferencesDocument).filter { $0.from == eventID }.isEmpty,
+                      "Une référence devenue ambiguë ne doit plus désigner automatiquement le premier document")
+        XCTAssertNotNil(after.nodes[eventID]?.properties["ambiguity"])
+    }
+}
+
+final class ContextConfirmationAuditTests: XCTestCase {
+    func testExplicitDocumentConfirmationSurvivesNewHomonym() async throws {
+        let (engine, _) = try await makeContext()
+        try await engine.setScope(.professional, for: mailSource.id)
+        try await engine.setScope(.professional, for: folderSource.id)
+        let mail = makeMailEvent(source: realMailSource, title: "Lire rapport.xlsx", summary: "Voir rapport.xlsx", action: "Lire rapport.xlsx")
+        try await engine.ingest([makeFileEvent(name: "rapport.xlsx", path: "A/rapport.xlsx"), mail])
+        let before = try await engine.snapshot()
+        let event = try XCTUnwrap(before.nodes(of: .event).first { $0.properties["eventID"] == mail.id.uuidString })
+        let edge = try XCTUnwrap(before.relations(of: .eventReferencesDocument).first { $0.from == event.id })
+        try await engine.confirmRelation(edge.id)
+        try await engine.ingest([makeFileEvent(name: "rapport.xlsx", path: "B/rapport.xlsx")])
+        let after = try await engine.snapshot()
+        XCTAssertEqual(after.relations[edge.id]?.status, .confirmed)
+        XCTAssertEqual(after.relations[edge.id]?.userCorrected, true)
+    }
+}

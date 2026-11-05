@@ -73,7 +73,7 @@ struct MissionsView: View {
     private var safetyBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: "hand.raised")
-            Text("GHOST propose, vous décidez : aucune mission n'est exécutée. Envois, créations et modifications de fichiers exigent votre validation.")
+            Text("GHOST planifie. Dans Activité, une mission Excel confirmée peut être exécutée localement après autorisation des dossiers. Aucun envoi externe n'est automatique.")
                 .font(.callout)
             Spacer()
         }
@@ -364,7 +364,7 @@ struct MissionDetail: View {
                     }
                 }
             }
-            Text("Aucune étape n'est exécutée. « Prête » n'est pas une autorisation d'agir.").font(.caption).foregroundStyle(.secondary)
+            Text("« Prête » ne suffit pas : autorisez séparément la lecture du contenu et le dossier de sortie dans Activité.").font(.caption).foregroundStyle(.secondary)
         }
     }
 

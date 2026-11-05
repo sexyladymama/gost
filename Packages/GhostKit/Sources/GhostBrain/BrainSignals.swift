@@ -159,7 +159,7 @@ struct ContextLens {
     func preferences(matching terms: [String]) -> [ContextNode] {
         let normalizedTerms = terms.map(BrainText.normalized).filter { $0.count > 2 }
         return graph.nodes.values.filter { node in
-            guard node.kind == .preference, namespace.hasPrefix(node.scope.rawValue) else { return false }
+            guard node.kind == .preference, node.namespace == namespace else { return false }
             let text = BrainText.normalized(node.title)
             return normalizedTerms.contains { text.contains($0) }
         }

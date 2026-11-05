@@ -6,12 +6,13 @@ import GhostPerception
 /// et le contrôle complet des sources et des données.
 struct PerceptionWindow: View {
     enum Section: String, CaseIterable, Identifiable {
-        case missions, events, memory, issues, sources, accessLog, privacy
+        case missions, activity, events, memory, issues, sources, accessLog, privacy
         var id: String { rawValue }
         var title: String {
             switch self {
             case .events: return "Événements"
             case .missions: return "Missions"
+            case .activity: return "Activité"
             case .memory: return "Mémoire"
             case .issues: return "Anomalies"
             case .sources: return "Sources"
@@ -23,6 +24,7 @@ struct PerceptionWindow: View {
             switch self {
             case .events: return "tray.full"
             case .missions: return "scope"
+            case .activity: return "play.circle"
             case .memory: return "brain"
             case .issues: return "exclamationmark.triangle"
             case .sources: return "antenna.radiowaves.left.and.right"
@@ -57,6 +59,7 @@ struct PerceptionWindow: View {
             switch section ?? .missions {
             case .events: EventsView(center: perception.center)
             case .missions: MissionsView(perception: perception)
+            case .activity: AutonomyView(perception: perception)
             case .memory: ContextView(perception: perception)
             case .issues: IssuesView(center: perception.center)
             case .sources: SourcesView(perception: perception)

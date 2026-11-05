@@ -166,6 +166,17 @@ enum ContextInference {
 
     /// Un nom de fichier doit désigner un seul projet/document dans la même frontière.
     static func reconcileDocuments(graph: inout ContextSnapshot) {
+        // Recalculer les rapprochements lexicaux : un deuxième homonyme peut
+        // invalider un choix auparavant unique. Les confirmations utilisateur restent.
+        for id in Array(graph.relations.keys) {
+            guard var relation = graph.relations[id], !relation.userCorrected,
+                  !relation.provenance.contains(where: \.isUserProvided) else { continue }
+            relation.provenance.removeAll {
+                $0.explanation.hasPrefix("Nom exact du document cité")
+                    || $0.explanation.hasPrefix("Le chemin du document mentionne uniquement")
+            }
+            graph.relations[id] = relation.provenance.isEmpty ? nil : relation
+        }
         let projects = graph.nodes.values.filter { $0.kind == .project && $0.properties["matchingName"] != nil }
         let documents = graph.nodes.values.filter { $0.kind == .document }
         for doc in documents {

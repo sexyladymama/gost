@@ -19,6 +19,8 @@ e-mail, ne modifie ni ne supprime aucun fichier et n'exécute aucune tâche.
 - [Mission 002.1](docs/MISSION_002_1.md) : corrections de stockage, reprise après panne et validation.
 - [GHOST CONTEXT (Mission 003)](docs/CONTEXT.md) : mémoire et compréhension contextuelle, cloisonnement, preuves, corrections.
 - [GHOST BRAIN (Mission 004)](docs/BRAIN.md) : décisions, missions, priorités, plans ; [évaluation chiffrée](docs/BRAIN_EVALUATION.md).
+- [GHOST AUTONOMY (Mission 005)](docs/AUTONOMY.md) : exécution locale d'un scénario Excel de bout en bout, Trust, vérification, reprise.
+- [Audit des Missions 003/004](docs/AUDIT_MISSIONS_003_004.md) : corrections, tests supplémentaires et limites vérifiées.
 
 ## Fonctionnalités
 
@@ -37,6 +39,7 @@ e-mail, ne modifie ni ne supprime aucun fichier et n'exécute aucune tâche.
 - *Sources* : activer/désactiver, connecter, **révoquer** chaque source ;
 - *Journal d'accès* : chaque accès à une source (autorisé, refusé, échec) ;
 - *Missions* : ce que GHOST a décidé de suivre, pourquoi, avec priorité, plan, manques, autorisations, preuves et historique ; il **propose, vous décidez** (rien n'est exécuté) ;
+- *Activité* : exécution locale d'une mission Excel confirmée (autorisation séparée des dossiers, progression, pause, annulation, vérification) ;
 - *Mémoire* : ce que GHOST comprend (projets, personnes, documents, demandes, échéances), statut confirmé / hypothèse / inconnu, preuves, corrections ;
 - *Confidentialité* : garanties, arrêt complet, **suppression des données collectées et de la mémoire**.
 
@@ -50,7 +53,7 @@ e-mail, ne modifie ni ne supprime aucun fichier et n'exécute aucune tâche.
 
 - macOS 14 Sonoma ou plus récent ;
 - Xcode 15 ou plus récent (CI : Xcode 16.4 sur macOS 15) ;
-- aucune dépendance externe, aucun compte développeur (signature locale) ;
+- une seule dépendance externe, [ZIPFoundation](https://github.com/weichsel/ZIPFoundation) 0.9.20 (MIT, version épinglée, module GhostAutonomy) : le premier `swift build`/Xcode a besoin d'un accès réseau pour la récupérer ; aucun compte développeur (signature locale) ;
 - pour Gmail réel uniquement : un projet Google Cloud et un ID client OAuth
   ([procédure](docs/GMAIL_SETUP.md)).
 
@@ -85,7 +88,7 @@ swift test --package-path Packages/GhostKit
 
 ou, dans Xcode, `Product ▸ Test` (⌘U) avec le schéma **GhostShell**.
 
-Les tests (163) couvrent la logique d'état de la Mission 001 et les exigences
+Les tests (191) couvrent la logique d'état de la Mission 001 et les exigences
 de la Mission 002 (préfixes `testR01_` à `testR10_`) :
 
 | # | Exigence | Tests |
@@ -128,11 +131,13 @@ gost/
 │   ├── Sources/GhostPerception/      Moteur de perception (Mission 002)
 │   ├── Sources/GhostContext/         Mémoire contextuelle, SQLite local (Mission 003)
 │   ├── Sources/GhostBrain/           Cerveau décisionnel : objectifs, décisions, missions, plans (Mission 004)
+│   ├── Sources/GhostAutonomy/        Exécution locale vérifiée (Mission 005)
 │   └── Tests/                        Tests XCTest
 └── docs/
     ├── PERCEPTION.md                 Documentation technique du moteur
     ├── CONTEXT.md                    Mémoire et compréhension contextuelle
     ├── BRAIN.md                      Cerveau décisionnel et missions
+    ├── AUTONOMY.md                   Moteur d'exécution local
     ├── BRAIN_EVALUATION.md           Évaluation chiffrée (générée par les tests)
     └── GMAIL_SETUP.md                Connexion d'une boîte Gmail de test
 ```

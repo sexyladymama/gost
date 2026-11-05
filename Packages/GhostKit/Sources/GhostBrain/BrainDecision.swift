@@ -244,11 +244,11 @@ enum DecisionEngine {
             out.reasons = ["Un document attendu par la mission est apparu : \(name).", "Preuves : " + evidence.joined(separator: " ; ")]
             out.uncertainties = ["Je suppose que ce fichier est la source de données attendue ; à confirmer."]
         } else if count >= 3 {
-            out.kind = .completeMission
-            out.changes = [.complete(evidence: evidence)]
+            out.kind = .updateMission
+            out.changes = [.artifact(ref, resolvesDependency: false)]
             out.confidence = min(0.85, 0.5 + 0.1 * Double(count))
-            out.reasons = ["Un fichier correspondant au livrable est apparu : \(name).", "Preuves : " + evidence.joined(separator: " ; ")]
-            out.uncertainties = ["Le contenu du fichier n'a pas été lu : seule sa présence est observée."]
+            out.reasons = ["Un fichier pouvant correspondre au livrable est apparu : \(name).", "Indices : " + evidence.joined(separator: " ; ")]
+            out.uncertainties = ["Le contenu du fichier n'a pas été lu : sa présence ne prouve ni sa conformité ni la bonne fin de la mission."]
         } else {
             out.kind = .updateMission
             out.changes = [.artifact(ref, resolvesDependency: false)]

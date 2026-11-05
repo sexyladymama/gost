@@ -4,6 +4,7 @@ import GhostKit
 import GhostPerception
 import GhostContext
 import GhostBrain
+import GhostAutonomy
 
 /// Configure et pilote les sources de perception depuis l'interface.
 ///
@@ -33,6 +34,8 @@ final class PerceptionController {
     @ObservationIgnored let center: PerceptionCenter
     let context: ContextCenter
     let brain: BrainCenter
+    let execution: ExecutionCenter
+    @ObservationIgnored private var executionAccess: [String: [SecurityScopedFolder]] = [:]
     @ObservationIgnored private let gateway: ModelGateway
 
     private(set) var emailMode: EmailMode
@@ -62,9 +65,11 @@ final class PerceptionController {
         context = ContextCenter(engine: ContextEngine(profile: profile, trust: system.trust, persistent: persistent))
         defaults = persistent ? .standard : UserDefaults(suiteName: "ghost.preview") ?? .standard
         secrets = persistent ? KeychainSecretStore(profileID: profile.id) : InMemorySecretStore()
-        gateway = ModelGateway(providers: [AnthropicProvider(http: system.http, secrets: secrets)], policy: GatewayPolicy(enabled: false))
+        gateway = ModelGateway(providers: [AnthropicProvider(http: system.http, secrets: secrets)], policy: GatewayPolicy(enabled: false),
+                               usageURL: persistent ? profile.directory.appendingPathComponent("model-usage.json") : nil)
         brain = BrainCenter(engine: BrainEngine(profile: profile, context: context.engine, trust: system.trust,
                                                 gateway: gateway, persistent: persistent))
+        execution = ExecutionCenter(engine: ExecutionEngine(profile: profile, brain: brain.engine, persistent: persistent), profileID: profile.id)
         externalModelEnabled = defaults.bool(forKey: Keys.externalModel)
         hasModelKey = ((try? secrets.load(AnthropicProvider.secretKey)) ?? nil) != nil
         emailMode = EmailMode(rawValue: defaults.string(forKey: Keys.emailMode) ?? "") ?? .none
@@ -241,6 +246,11 @@ final class PerceptionController {
             try await center.attachConsumer(brain.engine)
         } catch { await brain.engine.report(error) }
         await brain.reload()
+        do {
+            try await execution.engine.recover()
+            try await center.attachConsumer(execution.engine)
+        } catch { lastError = error.localizedDescription }
+        await execution.reload()
     }
 
     func refreshContext() async {
@@ -264,11 +274,54 @@ final class PerceptionController {
     func makeCore() -> GhostCoreInterface {
         BrainAwareCore(base: center, onActive: { [weak self] active in
             guard let self else { return }
-            Task {
-                await self.brain.engine.setActive(active)
-                if active { await self.catchUpBrain() }
-            }
+            await self.brain.engine.setActive(active)
+            await self.execution.engine.setGlobalPaused(!active)
+            if active { Task { await self.catchUpBrain() } }
         })
+    }
+
+    func prepareExecution(_ missionID: String, sensitive: Bool) async {
+        do {
+            let id = try await execution.engine.prepare(missionID: missionID, declaredSensitive: sensitive)
+            try await chooseExecutionFolders(id)
+            try await execution.engine.start(id)
+        } catch { lastError = error.localizedDescription }
+        await execution.reload()
+    }
+
+    func chooseExecutionFolders(_ id: String) async throws {
+        func choose(_ message: String) throws -> URL {
+            let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false; panel.message = message; panel.prompt = "Autoriser"
+            NSApp.activate(ignoringOtherApps: true)
+            guard panel.runModal() == .OK, let url = panel.url else { throw ExecutionError.cancelled }
+            return url
+        }
+        let input = try choose("Lecture du CONTENU autorisée pour cette exécution uniquement. Le dossier doit contenir des CSV/TSV avec produit,quantite,prix_unitaire. Aucun accès n'est déduit de la permission de perception.")
+        let output = try choose("Choisissez un dossier de SORTIE distinct : GHOST pourra y créer de nouveaux livrables. Aucun fichier existant ne sera remplacé.")
+        let inputBookmark = try input.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
+        let outputBookmark = try output.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+        let inputAccess = try SecurityScopedFolder(bookmark: inputBookmark), outputAccess = try SecurityScopedFolder(bookmark: outputBookmark)
+        try await execution.engine.authorize(id, input: inputAccess.url.resolvingSymlinksInPath(), output: outputAccess.url.resolvingSymlinksInPath(), allowReadContents: true, allowCreate: true)
+        executionAccess[id] = [inputAccess, outputAccess]
+        defaults.set(inputBookmark, forKey: "autonomy.\(id).input")
+        defaults.set(outputBookmark, forKey: "autonomy.\(id).output")
+    }
+
+    func resumeExecution(_ id: String) async {
+        do {
+            // La reprise exige une nouvelle confirmation des deux dossiers.
+            try await chooseExecutionFolders(id)
+            try await execution.engine.start(id)
+        } catch { lastError = error.localizedDescription }
+        await execution.reload()
+    }
+
+    func revokeExecution(_ id: String) async {
+        await execution.engine.trust.revoke(id)
+        await execution.perform { try await $0.pause(id) }
+        executionAccess[id] = nil
+        defaults.removeObject(forKey: "autonomy.\(id).input"); defaults.removeObject(forKey: "autonomy.\(id).output")
     }
 
     func catchUpBrain() async {
@@ -316,6 +369,8 @@ final class PerceptionController {
         lastError = nil
         do {
             try await center.deleteCollectedData(includingAccessLog: includingAccessLog)
+            executionAccess.removeAll()
+            for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("autonomy.") { defaults.removeObject(forKey: key) }
         } catch {
             lastError = Self.describe(error)
         }
@@ -331,14 +386,19 @@ final class PerceptionController {
 @MainActor
 final class BrainAwareCore: GhostCoreInterface {
     private let base: GhostCoreInterface
-    private let onActive: (Bool) -> Void
+    private let onActive: @MainActor (Bool) async -> Void
+    private var transition: Task<Void, Never>?
     var name: String { base.name + " + Brain" }
 
-    init(base: GhostCoreInterface, onActive: @escaping (Bool) -> Void) {
+    init(base: GhostCoreInterface, onActive: @escaping @MainActor (Bool) async -> Void) {
         self.base = base; self.onActive = onActive
     }
-    func start() { base.start(); onActive(true) }
-    func pause() { onActive(false); base.pause() }
-    func resume() { base.resume(); onActive(true) }
-    func stop() { onActive(false); base.stop() }
+    private func change(_ active: Bool) {
+        let previous = transition
+        transition = Task { await previous?.value; await onActive(active) }
+    }
+    func start() { base.start(); change(true) }
+    func pause() { change(false); base.pause() }
+    func resume() { base.resume(); change(true) }
+    func stop() { change(false); base.stop() }
 }
