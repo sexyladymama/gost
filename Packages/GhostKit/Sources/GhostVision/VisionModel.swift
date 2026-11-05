@@ -80,11 +80,14 @@ public enum TextBlocks {
         }
         return blocks.compactMap { group in
             // Une phrase qui passe à la ligne (bulle de message, paragraphe) reste UNE phrase : on ne sépare par un saut de ligne
-            // qu'après une ponctuation finale.
+            // que si la ligne précédente est courte ou finit par une ponctuation.
             var text = ""
             for line in group.map({ $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }) {
                 if text.isEmpty { text = line; continue }
-                text += (text.last.map { ".!?:;".contains($0) } ?? false) ? "\n" : " "
+                // Une ligne courte (nom de contact, titre) n'est pas une ligne coupée : elle garde son saut de ligne.
+                let previous = text.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? text
+                let wrapped = previous.count >= 40 && !(previous.last.map { ".!?:;".contains($0) } ?? false)
+                text += wrapped ? " " : "\n"
                 text += line
             }
             guard text.count >= 12 else { return nil }
