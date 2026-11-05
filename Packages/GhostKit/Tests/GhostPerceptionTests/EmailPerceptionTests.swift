@@ -217,3 +217,25 @@ final class ElisionRegressionTests: XCTestCase {
         XCTAssertTrue(l.tags.contains(.task), "« l'envoyer » doit aussi être reconnu")
     }
 }
+
+/// Demandes à l'impératif, comme on les écrit dans un message (Mission 007).
+final class ImperativeRequestTests: XCTestCase {
+    func event(_ body: String) -> GhostEvent { interpret(email(subject: "Message", body: body)) }
+
+    func testBareImperativeVerbsAreRequests() {
+        for text in ["Écris un mail à Paul pour décaler jeudi", "Trouve un club de boxe vers chez nous", "Crée un logo pour la boîte",
+                     "Regarde les bars vers La Défense", "Cherche un resto pour samedi"] {
+            let e = event(text)
+            XCTAssertTrue(e.tags.contains(.request) && e.tags.contains(.task), "\(text) → \(e.tags) \(e.evidence.map(\.rule))")
+        }
+        XCTAssertEqual(event("Écris un mail à Paul pour décaler jeudi").expectedOutput, "Mail")
+        XCTAssertEqual(event("Crée un logo pour la boîte").expectedOutput, "Logo ou visuel")
+    }
+
+    func testOrdinaryTextAndExistingBehaviourAreUnchanged() {
+        XCTAssertFalse(event("Le logo de la boîte est joli").tags.contains(.request))
+        XCTAssertFalse(event("Il fait beau à Paris aujourd'hui").tags.contains(.request))
+        XCTAssertEqual(event("Peux-tu me préparer un fichier Excel avec les résultats du mois pour demain ?").expectedOutput, "Fichier Excel",
+                       "Excel garde la priorité sur Mail et Logo")
+    }
+}
