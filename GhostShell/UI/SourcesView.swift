@@ -17,10 +17,10 @@ struct SourcesView: View {
             }
 
             Section {
-                Toggle("GHOST peut chercher en ligne (lieux, avec Apple Plans)", isOn: Binding(get: { perception.searchEnabled },
+                Toggle("GHOST peut chercher en ligne (lieux avec Apple Plans, web avec DuckDuckGo)", isOn: Binding(get: { perception.searchEnabled },
                                                                                                set: { value in Task { await perception.setSearchEnabled(value) } }))
                 TextField("Mon quartier ou ma ville (pour « chez nous »)", text: $perception.homeArea).textFieldStyle(.roundedBorder)
-                Text("Seules la question (« club de boxe ») et la zone (« Courbevoie ») sont envoyées à Apple Plans. Votre adresse reste sur ce Mac.")
+                Text("Seules la question (« club de boxe ») et la zone (« Courbevoie ») sont envoyées à Apple Plans ; pour le web, seule la question est envoyée à DuckDuckGo. Votre adresse reste sur ce Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             } header: {
                 Text("Recherche")

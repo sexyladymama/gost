@@ -4,6 +4,7 @@ import Foundation
 public enum MindIntent: Codable, Hashable, Sendable {
     case writeMessage(recipient: String?, topic: String)
     case findPlaces(query: String, area: String?, when: String?)
+    case searchWeb(query: String)
     case createLogo(brief: String)
     case createDocument(brief: String)
     case unsupported
@@ -12,6 +13,7 @@ public enum MindIntent: Codable, Hashable, Sendable {
         switch self {
         case .writeMessage: return "Écrire un message"
         case .findPlaces: return "Chercher des lieux"
+        case .searchWeb: return "Chercher sur le web"
         case .createLogo: return "Créer un logo ou un visuel"
         case .createDocument: return "Créer un document"
         case .unsupported: return "Demande non prise en charge"
@@ -82,6 +84,9 @@ public struct PlaceResult: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
+public enum SearchKind: String, Codable, Sendable { case places, web }
+
+/// Une recherche : de lieux (Apple Plans) ou sur le web. Pour le web, chaque résultat porte le titre (`name`), l'extrait (`address`) et le lien (`url`).
 public struct PlaceSearch: Codable, Identifiable, Hashable, Sendable {
     public var id: String
     public var missionID: String
@@ -94,6 +99,9 @@ public struct PlaceSearch: Codable, Identifiable, Hashable, Sendable {
     public var note: String?
     public var hidden: Bool
     public var searchedAt: Date
+    /// Absent dans les anciens fichiers : recherche de lieux.
+    public var kind: SearchKind?
+    public var isWeb: Bool { kind == .web }
 }
 
 public enum CreationKind: String, Codable, Sendable { case logo, document }

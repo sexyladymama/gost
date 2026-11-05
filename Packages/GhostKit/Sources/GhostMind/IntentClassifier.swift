@@ -54,6 +54,13 @@ public enum IntentClassifier {
             let when = capture(#"(?:genre\s+)?\b(?<w>le\s+\d{1,2}(?:\s+\p{L}+)?|demain(?:\s+soir)?|ce soir|ce week-end|samedi(?:\s+soir)?|dimanche(?:\s+soir)?|vendredi(?:\s+soir)?)\b"#, in: t, group: "w")
             return .findPlaces(query: query, area: area, when: when)
         }
+        // Recherche web : un verbe de recherche explicite suivi d'un sujet (« regarde » et « propose » sont trop ambigus ici).
+        let web = #"\b(trouve|trouver|cherche|chercher|recherche|rechercher|find|search|google|googler)\b"#
+        if has(web, in: n), !has(#"\b(mail|e-mail|email|courriel|logo|document|fichier)\b"#, in: n),
+           let query = capture(#"\b(?:trouve|trouver|cherche|chercher|recherche|rechercher|find|search for|search|google|googler)\b(?:-(?:moi|nous))?\s+(?:moi\s+)?(?:nous\s+)?(?:sur\s+(?:internet|google|le\s+web)\s+)?(?:des\s+infos?\s+(?:sur|à propos de)\s+|des\s+informations\s+(?:sur|à propos de)\s+)?(?<q>[^.;!?\n]{3,120})"#, in: t, group: "q"),
+           query.split(separator: " ").count >= 2 {
+            return .searchWeb(query: query.replacingOccurrences(of: #"\s+sur\s+(?:internet|google)$"#, with: "", options: [.regularExpression, .caseInsensitive]))
+        }
         return .unsupported
     }
 }

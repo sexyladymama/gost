@@ -10,7 +10,7 @@ struct SearchesView: View {
         Group {
             if center.searches.isEmpty {
                 ContentUnavailableView("Aucune recherche", systemImage: "magnifyingglass",
-                                       description: Text("Quand un message vous demande de trouver quelque chose (« trouve un club de boxe », « regarde les bars vers La Défense »), GHOST cherche et présente les résultats ici."))
+                                       description: Text("Quand un message vous demande de trouver quelque chose (« trouve un club de boxe », « cherche le prix d'un abonnement »), GHOST cherche et présente les résultats ici."))
             } else {
                 ScrollView { VStack(spacing: 14) { ForEach(center.searches) { SearchCard(search: $0, perception: perception) } }.padding(14) }
             }
@@ -27,6 +27,7 @@ private struct SearchCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(search.query.prefix(1).uppercased() + search.query.dropFirst()).font(.headline)
+                if search.isWeb { Text("· sur le web").foregroundStyle(.secondary) }
                 if let area = search.area { Text("· autour de \(area)").foregroundStyle(.secondary) }
                 if let when = search.when { Text("· \(when)").foregroundStyle(.secondary) }
                 Spacer()
@@ -38,12 +39,13 @@ private struct SearchCard: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(place.name).font(.callout.weight(.medium))
-                        Text(place.address).font(.caption).foregroundStyle(.secondary)
+                        Text(place.address).font(.caption).foregroundStyle(.secondary).lineLimit(search.isWeb ? 3 : nil)
+                        if search.isWeb, let link = place.url { Text(URL(string: link)?.host ?? link).font(.caption2).foregroundStyle(.tertiary) }
                         if let phone = place.phone { Text(phone).font(.caption).foregroundStyle(.secondary) }
                     }
                     Spacer()
                     if let distance = place.distanceMeters { Text(distance < 1000 ? "\(Int(distance)) m" : String(format: "%.1f km", distance / 1000)).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
-                    Button("Plans") { open(place) }.buttonStyle(GhostButtonStyle())
+                    Button(search.isWeb ? "Ouvrir" : "Plans") { open(place, web: search.isWeb) }.buttonStyle(GhostButtonStyle())
                 }
                 Divider()
             }
@@ -62,7 +64,11 @@ private struct SearchCard: View {
         case .needsArea: return ("Zone à préciser", .orange); case .notAuthorized: return ("Non autorisée", .red); case .failed: return ("Échec", .red)
         }
     }
-    private func open(_ place: PlaceResult) {
+    private func open(_ place: PlaceResult, web: Bool) {
+        if web {
+            if let link = place.url, let url = URL(string: link), url.scheme == "https" || url.scheme == "http" { NSWorkspace.shared.open(url) }
+            return
+        }
         var components = URLComponents(string: "https://maps.apple.com/")!
         components.queryItems = [URLQueryItem(name: "q", value: place.name), URLQueryItem(name: "ll", value: "\(place.latitude),\(place.longitude)")]
         if let url = components.url { NSWorkspace.shared.open(url) }

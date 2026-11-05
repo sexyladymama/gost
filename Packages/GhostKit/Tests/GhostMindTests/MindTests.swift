@@ -471,3 +471,81 @@ final class CreationTests: XCTestCase {
         XCTAssertEqual(external.prompts.get().count, 1)
     }
 }
+
+// MARK: - Recherche web
+
+private struct FakeWebSearcher: WebSearcher {
+    var results: [PlaceResult]
+    var failure: Error?
+    let calls = Box<[String]>([])
+    func search(query: String) async throws -> [PlaceResult] {
+        calls.update { $0.append(query) }
+        if let failure { throw failure }
+        return results
+    }
+}
+
+final class WebSearchTests: XCTestCase {
+    private let page = PlaceResult(id: "https://exemple.fr/tarifs", name: "Tarifs boxe", address: "Abonnements de 40 à 60 €", url: "https://exemple.fr/tarifs", latitude: 0, longitude: 0)
+
+    func testClassifierFindsWebQueriesButNotPlacesOrAmbiguousPhrases() {
+        XCTAssertEqual(IntentClassifier.classify("Cherche le prix d'un abonnement de boxe à Paris"), .searchWeb(query: "le prix d'un abonnement de boxe à Paris"))
+        XCTAssertEqual(IntentClassifier.classify("Trouve-moi des infos sur la loi Pinel"), .searchWeb(query: "la loi Pinel"))
+        if case .findPlaces = IntentClassifier.classify("Trouve un club de boxe vers chez nous") {} else { XCTFail("un lieu reste un lieu") }
+        XCTAssertEqual(IntentClassifier.classify("Regarde cette présentation avant demain"), .unsupported)
+        XCTAssertEqual(IntentClassifier.classify("Cherche"), .unsupported)
+    }
+
+    private func run(_ text: String, searcher: FakeWebSearcher, authorized: Bool = true) async throws -> (PlaceSearch, FakeWebSearcher) {
+        let env = try await Env.make(models: [])
+        if authorized { await env.trust.grant(SourceID("search"), permission: .searchOnline, scope: "web") }
+        let mind = MindEngine(profile: GhostProfile(id: "web", baseDirectory: FileManager.default.temporaryDirectory), brain: env.brain, context: env.context,
+                              trust: env.trust, models: [], sender: env.sender, userName: "Romain", webSearcher: searcher, persistent: false, clock: { now })
+        await mind.consume([try await env.request(text)])
+        let state = try await mind.snapshot()
+        return (try XCTUnwrap(state.searches.values.first), searcher)
+    }
+
+    func testWebSearchKeepsResultsAndSendsOnlyTheQuestion() async throws {
+        let (search, s) = try await run("Cherche le prix d'un abonnement de boxe à Paris", searcher: FakeWebSearcher(results: [page]))
+        XCTAssertEqual(search.status, .done); XCTAssertTrue(search.isWeb); XCTAssertEqual(search.results.first?.url, "https://exemple.fr/tarifs")
+        XCTAssertEqual(s.calls.get(), ["le prix d'un abonnement de boxe à Paris"])
+    }
+    func testNothingLeavesTheMacWithoutAuthorizationAndFailuresAreHonest() async throws {
+        let (denied, s) = try await run("Cherche le prix d'un abonnement de boxe à Paris", searcher: FakeWebSearcher(results: [page]), authorized: false)
+        XCTAssertEqual(denied.status, .notAuthorized); XCTAssertTrue(s.calls.get().isEmpty)
+        let (failed, _) = try await run("Cherche le prix d'un abonnement de boxe à Paris", searcher: FakeWebSearcher(results: [], failure: MindError.invalid("Service indisponible.")))
+        XCTAssertEqual(failed.status, .failed); XCTAssertEqual(failed.note, "Service indisponible.")
+    }
+
+    // Page réelle de DuckDuckGo enregistrée le 5 novembre 2026 (10 résultats, aucune publicité).
+    func testParsesARealDuckDuckGoPage() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/duckduckgo-results.html")
+        let html = try String(contentsOf: url, encoding: .utf8)
+        let results = try DuckDuckGoSearcher.parse(html: html, limit: 6)
+        XCTAssertEqual(results.count, 6)
+        XCTAssertEqual(results[0].name, "Prix d'un cours de boxe à Paris : tarifs 2026 détaillés")
+        XCTAssertEqual(results[0].url, "https://sbcparis.fr/guides/tarifs-boxe/prix-cours-boxe-paris/")
+        XCTAssertTrue(results[0].address.contains("abonnements SBC de 144 à 220 €/mois"), "balises <b> retirées, entités décodées")
+        XCTAssertFalse(results.contains { $0.name.contains("<") || $0.address.contains("&#x27;") })
+    }
+    func testRedirectLinksAdsAndUnknownPages() throws {
+        XCTAssertEqual(DuckDuckGoSearcher.resolve("//duckduckgo.com/l/?uddg=https%3A%2F%2Fexemple.fr%2Fa&rut=x")?.absoluteString, "https://exemple.fr/a")
+        XCTAssertNil(DuckDuckGoSearcher.resolve("https://duckduckgo.com/y.js?ad=1"))
+        XCTAssertNil(DuckDuckGoSearcher.resolve("javascript:alert(1)"))
+        XCTAssertThrowsError(try DuckDuckGoSearcher.parse(html: "<html>captcha</html>", limit: 5))
+        XCTAssertEqual(try DuckDuckGoSearcher.parse(html: "<div class=\"no-results\">Aucun résultat</div>", limit: 5), [])
+    }
+    func testSearcherSendsOnlyTheQueryAndRejectsHTTPErrors() async throws {
+        let seen = Box<URLRequest?>(nil)
+        let ok = DuckDuckGoSearcher { request in
+            seen.update { $0 = request }
+            return (Data("<div class=\"no-results\"></div>".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        _ = try await ok.search(query: "boxe paris")
+        let body = String(data: try XCTUnwrap(seen.get()?.httpBody), encoding: .utf8) ?? ""
+        XCTAssertEqual(body, "q=boxe%20paris&kl=fr-fr")
+        let bad = DuckDuckGoSearcher { request in (Data(), HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: nil, headerFields: nil)!) }
+        do { _ = try await bad.search(query: "x y"); XCTFail("429 doit échouer") } catch { XCTAssertTrue(error.localizedDescription.contains("429")) }
+    }
+}

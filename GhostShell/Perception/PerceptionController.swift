@@ -109,7 +109,7 @@ final class PerceptionController {
         mind = MindCenter(engine: MindEngine(profile: profile, brain: brain.engine, context: context.engine, trust: system.trust,
                                              models: [OnDeviceLanguageModel(), GatewayLanguageModel(gateway: gateway)],
                                              sender: AppleMailSender(), userName: firstName,
-                                             searcher: MapKitPlaceSearcher(), output: outputWriter,
+                                             searcher: MapKitPlaceSearcher(), webSearcher: DuckDuckGoSearcher(), output: outputWriter,
                                              homeArea: { [defaults] in defaults.string(forKey: "mind.homeArea") },
                                              persistent: persistent))
         screenEnabled = defaults.bool(forKey: Keys.screenEnabled)

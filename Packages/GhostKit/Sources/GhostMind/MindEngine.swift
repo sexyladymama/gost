@@ -20,6 +20,7 @@ public actor MindEngine: PerceptionEventConsumer {
     private let models: [LanguageModel]
     private let sender: MailSender
     private let searcher: PlaceSearcher?
+    private let webSearcher: WebSearcher?
     private let output: OutputWriter?
     private let homeArea: @Sendable () -> String?
     private let url: URL?
@@ -29,10 +30,10 @@ public actor MindEngine: PerceptionEventConsumer {
     public private(set) var autonomous = true
 
     public init(profile: GhostProfile, brain: BrainEngine, context: ContextEngine, trust: TrustEngine, models: [LanguageModel],
-                sender: MailSender, userName: String, searcher: PlaceSearcher? = nil, output: OutputWriter? = nil, homeArea: @escaping @Sendable () -> String? = { nil },
+                sender: MailSender, userName: String, searcher: PlaceSearcher? = nil, webSearcher: WebSearcher? = nil, output: OutputWriter? = nil, homeArea: @escaping @Sendable () -> String? = { nil },
                 persistent: Bool = true, clock: @escaping @Sendable () -> Date = { Date() }) {
         self.brain = brain; self.context = context; self.trust = trust; self.models = models; self.sender = sender
-        self.searcher = searcher; self.output = output; self.homeArea = homeArea
+        self.searcher = searcher; self.webSearcher = webSearcher; self.output = output; self.homeArea = homeArea
         self.userName = userName; self.clock = clock
         url = persistent ? profile.directory.appendingPathComponent("mind.json") : nil
         (updates, continuation) = AsyncStream.makeStream(of: MindUpdate.self, bufferingPolicy: .bufferingNewest(20))
@@ -79,6 +80,8 @@ public actor MindEngine: PerceptionEventConsumer {
             try await draftMail(mission: mission, request: request, recipient: recipient, topic: topic)
         case .findPlaces(let query, let area, let when):
             try await searchPlaces(mission: mission, request: request, query: query, area: area, when: when)
+        case .searchWeb(let query):
+            try await searchPlaces(mission: mission, request: request, query: query, area: nil, when: nil, kind: .web)
         case .createLogo(let brief):
             try await createArtifact(mission: mission, request: request, kind: .logo, brief: brief)
         case .createDocument(let brief):
@@ -217,22 +220,23 @@ public actor MindEngine: PerceptionEventConsumer {
 
     public static let searchSource = SourceID("search")
 
-    private func searchPlaces(mission: Mission, request: String, query: String, area: String?, when: String?) async throws {
+    private func searchPlaces(mission: Mission, request: String, query: String, area: String?, when: String?, kind: SearchKind = .places) async throws {
         let id = String(Digest.sha256(Data(("search|" + mission.id).utf8)).map { String(format: "%02x", $0) }.joined().prefix(24))
-        let search = await runSearch(id: id, missionID: mission.id, request: request, query: query, area: area, when: when)
+        let search = await runSearch(id: id, missionID: mission.id, request: request, query: query, area: area, when: when, kind: kind)
         var s = try load()
         s.searches[id] = search; s.handled[mission.id] = id
         try save(s)
     }
 
-    private func runSearch(id: String, missionID: String, request: String, query: String, area: String?, when: String?) async -> PlaceSearch {
+    private func runSearch(id: String, missionID: String, request: String, query: String, area: String?, when: String?, kind: SearchKind = .places) async -> PlaceSearch {
         func make(_ status: PlaceSearchStatus, _ results: [PlaceResult] = [], note: String? = nil, area: String? = area) -> PlaceSearch {
             PlaceSearch(id: id, missionID: missionID, query: query, area: area, when: when, basis: request, status: status, results: results,
-                        note: note, hidden: false, searchedAt: clock())
+                        note: note, hidden: false, searchedAt: clock(), kind: kind)
         }
         guard await trust.isAuthorized(Self.searchSource, .searchOnline) else {
             return make(.notAuthorized, note: "La recherche en ligne n'est pas autorisée : activez-la dans Sources ▸ Recherche.")
         }
+        if kind == .web { return await runWeb(query: query, make: { make($0, $1, note: $2) }) }
         let zone = (area == nil || area == "chez nous") ? (area == nil ? nil : homeArea()) : area
         guard let zone, !zone.trimmingCharacters(in: .whitespaces).isEmpty else {
             return make(.needsArea, note: area == "chez nous"
@@ -250,10 +254,22 @@ public actor MindEngine: PerceptionEventConsumer {
         }
     }
 
+    private func runWeb(query: String, make: (PlaceSearchStatus, [PlaceResult], String?) -> PlaceSearch) async -> PlaceSearch {
+        guard let webSearcher else { return make(.failed, [], "Aucun service de recherche web disponible.") }
+        do {
+            let results = try await webSearcher.search(query: query)
+            await trust.accessLog.record(Self.searchSource, operation: "web.search", target: "« \(query) »", outcome: .allowed)
+            return results.isEmpty ? make(.noResults, [], "Aucun résultat pour « \(query) ».") : make(.done, results, nil)
+        } catch {
+            await trust.accessLog.record(Self.searchSource, operation: "web.search", target: "« \(query) »", outcome: .failed, detail: error.localizedDescription)
+            return make(.failed, [], error.localizedDescription)
+        }
+    }
+
     public func rerunSearch(_ id: String) async throws {
         var s = try load()
         guard let old = s.searches[id] else { throw MindError.invalid("Recherche introuvable.") }
-        var new = await runSearch(id: id, missionID: old.missionID, request: old.basis, query: old.query, area: old.area, when: old.when)
+        var new = await runSearch(id: id, missionID: old.missionID, request: old.basis, query: old.query, area: old.area, when: old.when, kind: old.kind ?? .places)
         new.hidden = false
         s.searches[id] = new
         try save(s); publish()

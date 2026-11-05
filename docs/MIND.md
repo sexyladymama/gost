@@ -7,6 +7,7 @@ GHOST ne se contente plus de repérer une demande : il **la comprend et fait le 
 |---|---|---|
 | « Écris un mail à Paul pour décaler jeudi » | Retrouve Paul dans la mémoire locale, rédige le mail | **Brouillons** : *Envoyer* / *Refaire* / *Annuler* |
 | « Trouve un club de boxe vers chez nous genre le 17 », « Regarde les bars vers La Défense » | Cherche des lieux réels (Apple Plans) autour de la zone | **Recherches** |
+| « Cherche le prix d'un abonnement de boxe à Paris » | Cherche sur le web (DuckDuckGo) et garde titre, extrait et lien | **Recherches** |
 | « Crée un logo pour la boîte » | Dessine un SVG, le contrôle, le rend en PNG, l'enregistre | **Créations** |
 | « Rédige une lettre de motivation… » | Rédige le document (RTF) et l'enregistre | **Créations** |
 | « On a un dîner le 10 novembre à 21h » | Ajoute à l'agenda (Mission 006) | **Agenda** |
@@ -46,6 +47,12 @@ distance. Seules la question (« club de boxe ») et la zone (« La Défense »)
 **Sources ▸ Recherche** (reste sur le Mac) ; sans cela GHOST demande. Soumise à l'autorisation `searchOnline` (écran de bienvenue / Sources).
 Vérifié une fois contre le vrai service : « La Grande Arche de la Défense » localisée, 25 bars renvoyés avec noms et adresses.
 
+**Recherche web.** DuckDuckGo (page « html »), sans clé ni compte ; seule la question est envoyée (pas de cookie, pas de contexte). Déclenchée par un verbe
+explicite (« cherche », « trouve », « recherche », « search »…) suivi d'un sujet de deux mots au moins ; un lieu reste une recherche de lieux, « regarde » ne déclenche jamais
+une recherche web. Les publicités sont écartées, les redirections `duckduckgo.com/l/` résolues, seuls les liens http(s) sont ouverts. Même autorisation `searchOnline`.
+Ce n'est pas une API : si DuckDuckGo change sa page, GHOST affiche « format inattendu » au lieu d'inventer des résultats. Analyse testée sur une **vraie page** enregistrée
+(`Tests/GhostMindTests/Fixtures`) ; l'appel réseau lui-même est testé avec un réseau simulé.
+
 **Création.** Dossier choisi une fois par l'utilisateur (accès macOS par signet) — le seul où GHOST écrit. Écriture en `O_EXCL` : jamais d'écrasement
 (« Logo (2).svg »), noms assainis, aucune sortie du dossier. Logo : SVG extrait de la réponse puis refusé s'il contient script, lien externe, image,
 entité XML, s'il est trop gros ou trop complexe, ou sans dimensions sur l'élément `<svg>` ; il est ensuite **rendu par macOS** et refusé s'il est vide ou
@@ -71,7 +78,7 @@ masquage), et un **bout en bout** : une demande lue à l'écran (vrai OCR) → P
 
 ## Limites et suite
 
-- **Recherche web générale** (autre chose que des lieux) : non implémentée — aucune source gratuite et fiable sans clé ; nécessite un choix de fournisseur.
+- **Recherche web** : résultats bruts (titre, extrait, lien) ; GHOST ne lit pas encore les pages ni ne rédige de synthèse. DuckDuckGo peut limiter ou bloquer les requêtes répétées (erreur affichée).
 - **Images** autres que des logos vectoriels : non implémentées (génération d'images par un service externe, ou Image Playground).
 - WhatsApp, Messages : GHOST rédige le texte mais ne sait envoyer que par Mail.
 - Réservations, achats, publications : jamais, sans validation explicite (niveau 3).
