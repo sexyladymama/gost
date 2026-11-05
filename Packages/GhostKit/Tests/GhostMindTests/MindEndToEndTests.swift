@@ -84,4 +84,30 @@ final class MindEndToEndTests: XCTestCase {
         let log = await system.accessLog.all()
         XCTAssertFalse(log.contains { $0.operation == "network.request" })
     }
+
+    /// Message réellement tapé par le fondateur dans Messages (5 novembre 2026).
+    func testPolitePhrasedRequestWithAnAddressInMessages() async throws {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "Europe/Paris")!; cal.locale = Locale(identifier: "fr_FR")
+        let now = cal.date(from: DateComponents(year: 2026, month: 11, day: 5, hour: 21))!
+        let profile = GhostProfile(id: "e2e2", baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("ghost-mind-e2e-\(UUID())"))
+        let system = PerceptionSystem(profile: profile, persistent: false, tick: nil)
+        let context = ContextEngine(profile: profile, trust: system.trust, persistent: false)
+        var config = BrainConfig(); config.calendar = cal
+        let brain = BrainEngine(store: MissionStore(url: nil), context: context, trust: system.trust, gateway: nil, config: config, clock: { now })
+        let mind = MindEngine(profile: profile, brain: brain, context: context, trust: system.trust, models: [FixedModel()], sender: Sender(),
+                              userName: "Romain", persistent: false, clock: { now })
+        await system.engine.addConsumer(context); await system.engine.addConsumer(brain); await system.engine.addConsumer(mind)
+        await system.trust.grant(SourceID("screen"), permission: .observeScreen, scope: "écran")
+        try await context.setScope(.professional, for: SourceID("screen"))
+        let frame = CapturedFrame(image: screen(["Tu peux me faire un mail a envoyer a romain.meunier92@gmail.com pour lui dire qu'on a un", "RDV au resto maison sauvage le lundi de la semaine pro stp"]),
+                                  context: ScreenContext(app: "Messages", bundleID: "com.apple.MobileSMS", windowTitle: "Maxime"))
+        let source = ScreenSource(frames: Frames([frame]), recognizer: VisionTextRecognizer(), trust: system.trust, pollInterval: 0.01,
+                                  understanding: UnderstandingEngine(deadlines: DeadlineExtractor(calendar: cal)), appointments: AppointmentExtractor(calendar: cal), clock: { now })
+        await system.engine.register(source); await system.engine.start()
+        let report = await system.engine.runCycle(force: true)
+        let missions = try await brain.snapshot().missions.values
+        let state = try await mind.snapshot()
+        print("DIAG events=\(report.newEvents.count) missions=\(missions.count) drafts=\(state.drafts.count)")
+        XCTAssertEqual(report.newEvents.count, 1); XCTAssertEqual(missions.count, 1); XCTAssertEqual(state.drafts.count, 1)
+    }
 }

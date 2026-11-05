@@ -2,6 +2,16 @@ import Foundation
 import CoreGraphics
 import GhostPerception
 
+/// Dit en clair ce que la lecture de l'écran fait en ce moment (pour l'afficher dans Sources ▸ Écran) : sans cela, un « rien ne se passe »
+/// ne peut pas être distingué d'une autorisation manquante, d'une fenêtre GHOST au premier plan ou d'un écran inchangé.
+public final class ScreenDiagnostics: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = (text: "Pas encore de lecture.", date: Date())
+    public init() {}
+    public func set(_ text: String) { lock.withLock { current = (text, Date()) } }
+    public var snapshot: (text: String, date: Date) { lock.withLock { current } }
+}
+
 /// Empreinte visuelle 16×16 : deux captures quasi identiques ne sont pas relues (économie de calcul, rien n'est conservé).
 enum ImageFingerprint {
     static func hash(_ image: CGImage) -> [Bool] {
@@ -42,11 +52,14 @@ public final class ScreenSource: PerceptionSource, @unchecked Sendable {
     private let lock = NSLock()
     private var lastHash: [Bool] = []
     private var seen: [String: Date] = [:]
+    public let diagnostics: ScreenDiagnostics
     private var stats = (captures: 0, skipped: 0, lastLog: Date.distantPast)
 
     public init(id: SourceID = SourceID("screen"), frames: FrameSource, recognizer: TextRecognizer, policy: PrivacyPolicy = PrivacyPolicy(),
                 trust: TrustEngine, pollInterval: TimeInterval = 3, understanding: UnderstandingEngine = UnderstandingEngine(),
-                appointments: AppointmentExtractor = AppointmentExtractor(), clock: @escaping @Sendable () -> Date = { Date() }) {
+                appointments: AppointmentExtractor = AppointmentExtractor(), diagnostics: ScreenDiagnostics = ScreenDiagnostics(),
+                clock: @escaping @Sendable () -> Date = { Date() }) {
+        self.diagnostics = diagnostics
         descriptor = EventSource(id: id, kind: .screen, displayName: "Écran")
         self.frames = frames; self.recognizer = recognizer; self.policy = policy; self.trust = trust
         self.pollInterval = pollInterval; self.understanding = understanding; extractor = appointments; self.clock = clock
@@ -59,20 +72,23 @@ public final class ScreenSource: PerceptionSource, @unchecked Sendable {
             return []
         }
         guard let frame = try await frames.capture() else { return [] }
-        if case .skip = policy.decide(frame.context) { note(skipped: true); return [] }
+        if case .skip(let reason) = policy.decide(frame.context) { note(skipped: true); diagnostics.set("Fenêtre « \(frame.context.app) » ignorée : \(reason)."); return [] }
         let fingerprint = ImageFingerprint.hash(frame.image)
         let unchanged = lock.withLock { () -> Bool in
             defer { lastHash = fingerprint }
             return !fingerprint.isEmpty && ImageFingerprint.distance(lastHash, fingerprint) <= 2
         }
-        guard !unchanged else { return [] }
+        guard !unchanged else { diagnostics.set("Lecture de « \(frame.context.app) » : écran inchangé."); return [] }
         note(skipped: false)
         try Task.checkCancellation()
 
         let now = clock()
         var observations: [RawObservation] = []
-        for block in TextBlocks.group(try await recognizer.recognize(frame.image)) {
-            guard let text = policy.sanitize(block.text) else { continue }
+        let blocks = TextBlocks.group(try await recognizer.recognize(frame.image))
+        var refused = 0
+        defer { diagnostics.set("Dernière lecture : « \(frame.context.app) », \(blocks.count) bloc(s) de texte, \(refused) refusé(s) par la vie privée, \(observations.count) utile(s) (demande ou rendez-vous).") }
+        for block in blocks {
+            guard let text = policy.sanitize(block.text) else { refused += 1; continue }
             let key = Self.key(app: frame.context.app, text: text)
             let alreadySeen = lock.withLock { () -> Bool in
                 if let date = seen[key], now.timeIntervalSince(date) < 24 * 3600 { return true }

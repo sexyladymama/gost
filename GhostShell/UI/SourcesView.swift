@@ -50,6 +50,10 @@ struct SourcesView: View {
                             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
                         }
                     }
+                    TimelineView(.periodic(from: .now, by: 2)) { _ in
+                        let status = perception.screenDiagnostics.snapshot
+                        Label("\(status.text) (\(status.date.formatted(date: .omitted, time: .standard)))", systemImage: "eye").font(.callout).foregroundStyle(.secondary)
+                    }
                     TextField("Applications à ne jamais lire (séparées par des virgules)", text: $perception.excludedApps)
                         .textFieldStyle(.roundedBorder)
                     Text("Toujours ignorés : gestionnaires de mots de passe, sites de banque et de paiement, navigation privée, la fenêtre de GHOST, écran verrouillé. Seul le texte utile (une demande, un rendez-vous) est conservé, jamais d'image. ⌃⌥⌘G met GHOST en pause.")

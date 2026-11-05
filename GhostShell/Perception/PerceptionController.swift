@@ -66,6 +66,7 @@ final class PerceptionController {
     private(set) var screenEnabled = false
     /// Permission « Enregistrement de l'écran » de macOS (accordée par l'utilisateur dans Réglages Système, jamais par GHOST).
     private(set) var screenPermission = false
+    let screenDiagnostics = ScreenDiagnostics()
     private(set) var calendarAutoAdd = false
     private(set) var onboardingDone = false
     /// Applications supplémentaires à ne jamais lire (séparées par des virgules).
@@ -215,8 +216,8 @@ final class PerceptionController {
 
     private func registerScreenSource() async {
         let extras = Set(excludedApps.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
-        let source = ScreenSource(frames: ScreenCaptureKitFrameSource(), recognizer: VisionTextRecognizer(),
-                                  policy: PrivacyPolicy(extraExcludedApps: extras), trust: system.trust)
+        let source = ScreenSource(frames: ScreenCaptureKitFrameSource(diagnostics: screenDiagnostics), recognizer: VisionTextRecognizer(),
+                                  policy: PrivacyPolicy(extraExcludedApps: extras), trust: system.trust, diagnostics: screenDiagnostics)
         await center.register(source)
     }
 
