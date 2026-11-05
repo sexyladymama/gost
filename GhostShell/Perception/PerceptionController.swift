@@ -116,6 +116,7 @@ final class PerceptionController {
     /// Réenregistre les sources autorisées lors d'une session précédente.
     func restoreSources() async {
         defer { Task { await self.initializeContext() } }
+        await reconcileConsent()
         switch emailMode {
         case .simulation:
             await registerEmailSource(provider: SimulatedMailProvider())
@@ -141,6 +142,22 @@ final class PerceptionController {
     }
 
     // MARK: - Écran et agenda
+
+    /// Le consentement est noté deux fois (réglage et autorisation). S'ils divergent — par exemple parce qu'une autre copie de GHOST
+    /// a écrasé le fichier des autorisations —, GHOST **n'invente pas** d'autorisation : il désactive la fonction et le dit,
+    /// au lieu de réessayer et d'échouer en boucle.
+    private func reconcileConsent() async {
+        var lost: [String] = []
+        if screenEnabled, !(await system.trust.isAuthorized(screenID, .observeScreen)) {
+            screenEnabled = false; defaults.set(false, forKey: Keys.screenEnabled); lost.append("de lire l'écran")
+        }
+        if calendarAutoAdd, !(await system.trust.isAuthorized(CalendarAgent.sourceID, .writeCalendar)) {
+            calendarAutoAdd = false; defaults.set(false, forKey: Keys.calendarAutoAdd); lost.append("d'ajouter à l'agenda")
+        }
+        if !lost.isEmpty {
+            lastError = "L'autorisation " + lost.joined(separator: " et ") + " n'était plus enregistrée (une autre copie de GHOST a probablement écrasé le fichier des autorisations). Réactivez-la dans Sources ▸ Écran et Agenda."
+        }
+    }
 
     private func registerScreenSource() async {
         let extras = Set(excludedApps.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })

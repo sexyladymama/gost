@@ -25,6 +25,26 @@ final class GhostAppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
+    /// Une seule copie de GHOST à la fois : deux copies écrivent dans les mêmes fichiers (autorisations, missions, agenda)
+    /// et s'écrasent mutuellement. (Ignoré pendant les tests automatisés.)
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil,
+              let bundleID = Bundle.main.bundleIdentifier else { return }
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+        guard !others.isEmpty else { return }
+        let alert = NSAlert()
+        alert.messageText = "GHOST est déjà ouvert"
+        alert.informativeText = "Deux copies de GHOST écrivent dans les mêmes fichiers et effacent mutuellement leurs autorisations. Quitter l'autre copie et continuer ici ?"
+        alert.addButton(withTitle: "Quitter l'autre copie")
+        alert.addButton(withTitle: "Quitter celle-ci")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { exit(0) }
+        others.forEach { $0.terminate() }
+        for _ in 0..<30 where others.contains(where: { !$0.isTerminated }) { Thread.sleep(forTimeInterval: 0.1) }
+        others.filter { !$0.isTerminated }.forEach { $0.forceTerminate() }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
             try stateManager.start()
