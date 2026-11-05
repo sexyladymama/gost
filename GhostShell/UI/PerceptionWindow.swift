@@ -6,13 +6,14 @@ import GhostPerception
 /// et le contrôle complet des sources et des données.
 struct PerceptionWindow: View {
     enum Section: String, CaseIterable, Identifiable {
-        case missions, drafts, agenda, activity, events, memory, issues, sources, accessLog, privacy
+        case missions, drafts, searches, agenda, activity, events, memory, issues, sources, accessLog, privacy
         var id: String { rawValue }
         var title: String {
             switch self {
             case .events: return "Événements"
             case .missions: return "Missions"
             case .drafts: return "Brouillons"
+            case .searches: return "Recherches"
             case .agenda: return "Agenda"
             case .activity: return "Activité"
             case .memory: return "Mémoire"
@@ -27,6 +28,7 @@ struct PerceptionWindow: View {
             case .events: return "tray.full"
             case .missions: return "scope"
             case .drafts: return "envelope"
+            case .searches: return "magnifyingglass"
             case .agenda: return "calendar"
             case .activity: return "play.circle"
             case .memory: return "brain"
@@ -65,6 +67,7 @@ struct PerceptionWindow: View {
             case .events: EventsView(center: perception.center)
             case .missions: MissionsView(perception: perception)
             case .drafts: DraftsView(perception: perception)
+            case .searches: SearchesView(perception: perception)
             case .agenda: AgendaView(perception: perception)
             case .activity: AutonomyView(perception: perception)
             case .memory: ContextView(perception: perception)
@@ -104,6 +107,7 @@ struct PerceptionWindow: View {
         switch item {
         case .missions: return perception.brain.missions.filter { [.proposed, .needsClarification].contains($0.state) }.count
         case .drafts: return perception.mind.pending.count
+        case .searches: return perception.mind.searches.count
         case .agenda: return perception.calendar.entries.filter { $0.status == .suggested }.count
         case .events: return perception.center.unseenImportant.count
         case .issues: return perception.center.issues.count

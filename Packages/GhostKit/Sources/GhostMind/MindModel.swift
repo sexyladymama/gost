@@ -57,12 +57,62 @@ public struct MailDraft: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+public enum PlaceSearchStatus: String, Codable, Sendable {
+    case done, noResults
+    /// « chez nous » ou aucune zone : l'utilisateur doit préciser où chercher.
+    case needsArea
+    /// La recherche en ligne n'est pas autorisée dans GHOST.
+    case notAuthorized
+    case failed
+}
+
+public struct PlaceResult: Codable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var address: String
+    public var phone: String?
+    public var url: String?
+    public var latitude: Double
+    public var longitude: Double
+    public var distanceMeters: Double?
+    public init(id: String, name: String, address: String, phone: String? = nil, url: String? = nil,
+                latitude: Double, longitude: Double, distanceMeters: Double? = nil) {
+        self.id = id; self.name = name; self.address = address; self.phone = phone; self.url = url
+        self.latitude = latitude; self.longitude = longitude; self.distanceMeters = distanceMeters
+    }
+}
+
+public struct PlaceSearch: Codable, Identifiable, Hashable, Sendable {
+    public var id: String
+    public var missionID: String
+    public var query: String
+    public var area: String?
+    public var when: String?
+    public var basis: String
+    public var status: PlaceSearchStatus
+    public var results: [PlaceResult]
+    public var note: String?
+    public var hidden: Bool
+    public var searchedAt: Date
+}
+
 public struct MindState: Codable, Sendable {
     public var schemaVersion = 1
     public var drafts: [String: MailDraft] = [:]
-    /// Missions déjà traitées (clé : identifiant de mission) : un brouillon n'est jamais recréé en double.
+    /// Missions déjà traitées (clé : identifiant de mission) : un travail n'est jamais recréé en double.
     public var handled: [String: String] = [:]
+    public var searches: [String: PlaceSearch] = [:]
     public init() {}
+
+    private enum Keys: String, CodingKey { case schemaVersion, drafts, handled, searches }
+    /// Décodage tolérant : un fichier écrit avant l'ajout d'un champ reste lisible.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        drafts = try c.decodeIfPresent([String: MailDraft].self, forKey: .drafts) ?? [:]
+        handled = try c.decodeIfPresent([String: String].self, forKey: .handled) ?? [:]
+        searches = try c.decodeIfPresent([String: PlaceSearch].self, forKey: .searches) ?? [:]
+    }
 }
 
 public enum MindError: Error, LocalizedError, Sendable {

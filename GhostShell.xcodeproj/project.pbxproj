@@ -66,6 +66,7 @@
 		C00700000000000000000003 /* MindEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00700000000000000000013 /* MindEndToEndTests.swift */; };
 		C00700000000000000000021 /* GhostMind in Frameworks */ = {isa = PBXBuildFile; productRef = C00700000000000000000031 /* GhostMind */; };
 		C00700000000000000000022 /* GhostMind in Frameworks */ = {isa = PBXBuildFile; productRef = C00700000000000000000032 /* GhostMind */; };
+		C00800000000000000000001 /* SearchesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00800000000000000000011 /* SearchesView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -117,6 +118,7 @@
 		C00700000000000000000011 /* DraftsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftsView.swift; sourceTree = "<group>"; };
 		C00700000000000000000012 /* MindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindTests.swift; sourceTree = "<group>"; };
 		C00700000000000000000013 /* MindEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindEndToEndTests.swift; sourceTree = "<group>"; };
+		C00800000000000000000011 /* SearchesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchesView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -201,6 +203,7 @@
 				C00600000000000000000011 /* AgendaView.swift */,
 				C00600000000000000000012 /* OnboardingView.swift */,
 				C00700000000000000000011 /* DraftsView.swift */,
+				C00800000000000000000011 /* SearchesView.swift */,
 				C00500000000000000000011 /* AutonomyView.swift */,
 				C00300000000000000000014 /* GhostTheme.swift */,
 				C00300000000000000000015 /* MissionsView.swift */,
@@ -420,6 +423,7 @@
 				C00600000000000000000001 /* AgendaView.swift in Sources */,
 				C00600000000000000000002 /* OnboardingView.swift in Sources */,
 				C00700000000000000000001 /* DraftsView.swift in Sources */,
+				C00800000000000000000001 /* SearchesView.swift in Sources */,
 				C00600000000000000000003 /* GhostHotKey.swift in Sources */,
 				C00500000000000000000001 /* AutonomyView.swift in Sources */,
 				C00300000000000000000004 /* GhostTheme.swift in Sources */,

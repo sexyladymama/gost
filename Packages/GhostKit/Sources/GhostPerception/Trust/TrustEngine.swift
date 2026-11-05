@@ -12,6 +12,8 @@ public enum Permission: String, Codable, Sendable {
     case observeScreen
     /// Créer des événements dans l'agenda de l'utilisateur (jamais modifier ni supprimer ceux qu'il a créés lui-même).
     case writeCalendar
+    /// Interroger un service de recherche en ligne (lieux avec Apple Plans) pour répondre à une demande.
+    case searchOnline
 }
 
 /// Autorisation accordée par l'utilisateur.

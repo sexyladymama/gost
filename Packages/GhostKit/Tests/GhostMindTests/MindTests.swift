@@ -266,3 +266,75 @@ final class MindEngineTests: XCTestCase {
         try await env.mind.deleteMemory()
     }
 }
+
+// MARK: - Recherche de lieux
+
+private struct FakeSearcher: PlaceSearcher {
+    var results: [PlaceResult]
+    var failure: Error?
+    let calls = Box<[(query: String, area: String)]>([])
+    func search(query: String, area: String) async throws -> [PlaceResult] {
+        calls.update { $0.append((query, area)) }
+        if let failure { throw failure }
+        return results
+    }
+}
+private let boxingClub = PlaceResult(id: "1", name: "Boxing Club Courbevoie", address: "12 rue de Paris, Courbevoie", phone: "+33 1 00 00 00 00",
+                                     url: nil, latitude: 48.9, longitude: 2.25, distanceMeters: 900)
+
+final class PlaceSearchTests: XCTestCase {
+    private func make(searcher: FakeSearcher, authorized: Bool = true, home: String? = "Courbevoie") async throws -> (MindEngine, Env, FakeSearcher) {
+        let env = try await Env.make(models: [])
+        if authorized { await env.trust.grant(SourceID("search"), permission: .searchOnline, scope: "Apple Plans") }
+        let mind = MindEngine(profile: GhostProfile(id: "places", baseDirectory: FileManager.default.temporaryDirectory), brain: env.brain, context: env.context,
+                              trust: env.trust, models: [], sender: env.sender, userName: "Romain", searcher: searcher, homeArea: { home },
+                              persistent: false, clock: { now })
+        return (mind, env, searcher)
+    }
+    private func run(_ text: String, searcher: FakeSearcher, authorized: Bool = true, home: String? = "Courbevoie") async throws -> (PlaceSearch, FakeSearcher) {
+        let (mind, env, s) = try await make(searcher: searcher, authorized: authorized, home: home)
+        await mind.consume([try await env.request(text)])
+        let state = try await mind.snapshot()
+        return (try XCTUnwrap(state.searches.values.first), s)
+    }
+
+    func testNamedAreaIsSearchedAndResultsAreKept() async throws {
+        let (search, s) = try await run("Regarde les bars vers La Défense sympa", searcher: FakeSearcher(results: [boxingClub]))
+        XCTAssertEqual(search.status, .done); XCTAssertEqual(search.results.count, 1)
+        XCTAssertEqual(s.calls.get().first?.query, "bars"); XCTAssertEqual(s.calls.get().first?.area, "La Défense")
+    }
+    func testHomeAreaUsesTheAddressTheUserGaveAndKeepsTheDate() async throws {
+        let (search, s) = try await run("Trouve un club de boxe vers chez nous genre le 17", searcher: FakeSearcher(results: [boxingClub]))
+        XCTAssertEqual(s.calls.get().first?.area, "Courbevoie"); XCTAssertEqual(s.calls.get().first?.query, "club de boxe")
+        XCTAssertEqual(search.when, "le 17"); XCTAssertEqual(search.area, "Courbevoie")
+    }
+    func testHomeWithoutAnAddressAsksInsteadOfGuessing() async throws {
+        let (search, s) = try await run("Trouve un club de boxe vers chez nous", searcher: FakeSearcher(results: [boxingClub]), home: nil)
+        XCTAssertEqual(search.status, .needsArea); XCTAssertTrue(search.note?.contains("Sources") ?? false)
+        XCTAssertTrue(s.calls.get().isEmpty, "aucune requête sans zone")
+    }
+    func testNothingLeavesTheMacWithoutAuthorization() async throws {
+        let (search, s) = try await run("Regarde les bars vers La Défense sympa", searcher: FakeSearcher(results: [boxingClub]), authorized: false)
+        XCTAssertEqual(search.status, .notAuthorized); XCTAssertTrue(s.calls.get().isEmpty)
+    }
+    func testFailureAndEmptyResultsAreReportedHonestly() async throws {
+        let (failed, _) = try await run("Regarde les bars vers La Défense sympa", searcher: FakeSearcher(results: [], failure: MindError.invalid("Zone introuvable.")))
+        XCTAssertEqual(failed.status, .failed); XCTAssertEqual(failed.note, "Zone introuvable.")
+        let (empty, _) = try await run("Regarde les bars vers La Défense sympa", searcher: FakeSearcher(results: []))
+        XCTAssertEqual(empty.status, .noResults)
+    }
+    func testSearchIsNotRepeatedAndCanBeRerunOrHidden() async throws {
+        let (mind, env, s) = try await make(searcher: FakeSearcher(results: [boxingClub]))
+        let event = try await env.request("Regarde les bars vers La Défense sympa")
+        await mind.consume([event]); await mind.consume([event])
+        XCTAssertEqual(s.calls.get().count, 1, "une demande = une recherche")
+        let before = try await mind.snapshot()
+        let id = try XCTUnwrap(before.searches.keys.first)
+        try await mind.rerunSearch(id); XCTAssertEqual(s.calls.get().count, 2)
+        try await mind.hideSearch(id)
+        let after = try await mind.snapshot()
+        XCTAssertTrue(after.searches[id]?.hidden ?? false)
+        let log = await env.trust.accessLog.all()
+        XCTAssertTrue(log.contains { $0.operation == "places.search" && $0.target.contains("bars") })
+    }
+}

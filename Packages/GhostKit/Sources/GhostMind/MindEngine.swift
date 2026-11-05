@@ -19,6 +19,8 @@ public actor MindEngine: PerceptionEventConsumer {
     private let trust: TrustEngine
     private let models: [LanguageModel]
     private let sender: MailSender
+    private let searcher: PlaceSearcher?
+    private let homeArea: @Sendable () -> String?
     private let url: URL?
     private let userName: String
     private let clock: @Sendable () -> Date
@@ -26,8 +28,10 @@ public actor MindEngine: PerceptionEventConsumer {
     public private(set) var autonomous = true
 
     public init(profile: GhostProfile, brain: BrainEngine, context: ContextEngine, trust: TrustEngine, models: [LanguageModel],
-                sender: MailSender, userName: String, persistent: Bool = true, clock: @escaping @Sendable () -> Date = { Date() }) {
+                sender: MailSender, userName: String, searcher: PlaceSearcher? = nil, homeArea: @escaping @Sendable () -> String? = { nil },
+                persistent: Bool = true, clock: @escaping @Sendable () -> Date = { Date() }) {
         self.brain = brain; self.context = context; self.trust = trust; self.models = models; self.sender = sender
+        self.searcher = searcher; self.homeArea = homeArea
         self.userName = userName; self.clock = clock
         url = persistent ? profile.directory.appendingPathComponent("mind.json") : nil
         (updates, continuation) = AsyncStream.makeStream(of: MindUpdate.self, bufferingPolicy: .bufferingNewest(20))
@@ -72,7 +76,9 @@ public actor MindEngine: PerceptionEventConsumer {
         switch intent {
         case .writeMessage(let recipient, let topic):
             try await draftMail(mission: mission, request: request, recipient: recipient, topic: topic)
-        case .findPlaces, .createLogo, .createDocument, .unsupported:
+        case .findPlaces(let query, let area, let when):
+            try await searchPlaces(mission: mission, request: request, query: query, area: area, when: when)
+        case .createLogo, .createDocument, .unsupported:
             return   // outils suivants ; la mission reste simplement proposée dans « Missions »
         }
     }
@@ -127,6 +133,59 @@ public actor MindEngine: PerceptionEventConsumer {
         let simple = EmailDrafter.simplified(recipient: recipientName, topic: topic, user: userName)
         return Made(subject: simple.subject, body: simple.body, by: "brouillon simplifié (sans IA)", usedModel: false,
                     note: "Brouillon simplifié : " + (firstReason ?? "aucun modèle de langage disponible.") + " Utilisez « Refaire » une fois le modèle disponible.")
+    }
+
+    // MARK: Recherche de lieux
+
+    public static let searchSource = SourceID("search")
+
+    private func searchPlaces(mission: Mission, request: String, query: String, area: String?, when: String?) async throws {
+        let id = String(Digest.sha256(Data(("search|" + mission.id).utf8)).map { String(format: "%02x", $0) }.joined().prefix(24))
+        let search = await runSearch(id: id, missionID: mission.id, request: request, query: query, area: area, when: when)
+        var s = try load()
+        s.searches[id] = search; s.handled[mission.id] = id
+        try save(s)
+    }
+
+    private func runSearch(id: String, missionID: String, request: String, query: String, area: String?, when: String?) async -> PlaceSearch {
+        func make(_ status: PlaceSearchStatus, _ results: [PlaceResult] = [], note: String? = nil, area: String? = area) -> PlaceSearch {
+            PlaceSearch(id: id, missionID: missionID, query: query, area: area, when: when, basis: request, status: status, results: results,
+                        note: note, hidden: false, searchedAt: clock())
+        }
+        guard await trust.isAuthorized(Self.searchSource, .searchOnline) else {
+            return make(.notAuthorized, note: "La recherche en ligne n'est pas autorisée : activez-la dans Sources ▸ Recherche.")
+        }
+        let zone = (area == nil || area == "chez nous") ? (area == nil ? nil : homeArea()) : area
+        guard let zone, !zone.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return make(.needsArea, note: area == "chez nous"
+                        ? "« Chez nous » : indiquez votre quartier ou votre ville dans Sources ▸ Recherche pour que GHOST sache où chercher."
+                        : "Aucune zone précisée : indiquez où chercher.")
+        }
+        guard let searcher else { return make(.failed, note: "Aucun service de recherche disponible.", area: zone) }
+        do {
+            let results = try await searcher.search(query: query, area: zone)
+            await trust.accessLog.record(Self.searchSource, operation: "places.search", target: "« \(query) » autour de « \(zone) »", outcome: .allowed)
+            return results.isEmpty ? make(.noResults, note: "Aucun résultat pour « \(query) » autour de « \(zone) ».", area: zone) : make(.done, results, area: zone)
+        } catch {
+            await trust.accessLog.record(Self.searchSource, operation: "places.search", target: "« \(query) »", outcome: .failed, detail: error.localizedDescription)
+            return make(.failed, note: error.localizedDescription, area: zone)
+        }
+    }
+
+    public func rerunSearch(_ id: String) async throws {
+        var s = try load()
+        guard let old = s.searches[id] else { throw MindError.invalid("Recherche introuvable.") }
+        var new = await runSearch(id: id, missionID: old.missionID, request: old.basis, query: old.query, area: old.area, when: old.when)
+        new.hidden = false
+        s.searches[id] = new
+        try save(s); publish()
+    }
+
+    public func hideSearch(_ id: String) throws {
+        var s = try load()
+        guard var search = s.searches[id] else { throw MindError.invalid("Recherche introuvable.") }
+        search.hidden = true; s.searches[id] = search
+        try save(s); publish()
     }
 
     // MARK: Actions de l'utilisateur
@@ -207,8 +266,10 @@ public actor MindEngine: PerceptionEventConsumer {
         let alive = Set(try await brain.snapshot().missions.keys)
         var s = try load()
         let orphans = s.drafts.filter { !alive.contains($0.value.missionID) }.map(\.key)
-        guard !orphans.isEmpty else { return }
+        let orphanSearches = s.searches.filter { !alive.contains($0.value.missionID) }.map(\.key)
+        guard !orphans.isEmpty || !orphanSearches.isEmpty else { return }
         for id in orphans { s.drafts[id] = nil }
+        for id in orphanSearches { s.searches[id] = nil }
         s.handled = s.handled.filter { alive.contains($0.key) }
         try save(s); publish()
     }

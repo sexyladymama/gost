@@ -17,6 +17,16 @@ struct SourcesView: View {
             }
 
             Section {
+                Toggle("GHOST peut chercher en ligne (lieux, avec Apple Plans)", isOn: Binding(get: { perception.searchEnabled },
+                                                                                               set: { value in Task { await perception.setSearchEnabled(value) } }))
+                TextField("Mon quartier ou ma ville (pour « chez nous »)", text: $perception.homeArea).textFieldStyle(.roundedBorder)
+                Text("Seules la question (« club de boxe ») et la zone (« Courbevoie ») sont envoyées à Apple Plans. Votre adresse reste sur ce Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("Recherche")
+            }
+
+            Section {
                 Toggle("GHOST regarde mon écran", isOn: Binding(get: { perception.screenEnabled },
                                                                   set: { value in Task { await perception.setScreenObservation(value) } }))
                 if perception.screenEnabled {

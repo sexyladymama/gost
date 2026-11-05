@@ -7,6 +7,7 @@ struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var screen = true
     @State private var calendar = true
+    @State private var search = true
     @State private var busy = false
 
     var body: some View {
@@ -29,12 +30,13 @@ struct OnboardingView: View {
             Divider()
             Toggle("Autoriser GHOST à regarder mon écran", isOn: $screen)
             Toggle("Autoriser GHOST à ajouter directement des rendez-vous à mon agenda", isOn: $calendar)
+            Toggle("Autoriser GHOST à chercher en ligne pour répondre à mes demandes (lieux, avec Apple Plans : seules la question et la zone sont envoyées)", isOn: $search)
             Text("macOS vous demandera ensuite l'autorisation « Enregistrement de l'écran » et l'accès à l'agenda. GHOST ne peut pas les accorder à votre place ; après avoir accordé l'enregistrement de l'écran, quittez et relancez GHOST.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Spacer()
-                Button("Plus tard") { finish(screen: false, calendar: false) }.buttonStyle(GhostButtonStyle())
-                Button("Commencer") { finish(screen: screen, calendar: calendar) }
+                Button("Plus tard") { finish(screen: false, calendar: false, search: false) }.buttonStyle(GhostButtonStyle())
+                Button("Commencer") { finish(screen: screen, calendar: calendar, search: search) }
                     .buttonStyle(GhostButtonStyle(prominent: true)).keyboardShortcut(.defaultAction).disabled(busy)
             }
         }
@@ -53,10 +55,10 @@ struct OnboardingView: View {
         }
     }
 
-    private func finish(screen: Bool, calendar: Bool) {
+    private func finish(screen: Bool, calendar: Bool, search: Bool) {
         busy = true
         Task {
-            await perception.completeOnboarding(screen: screen, calendarAutoAdd: calendar)
+            await perception.completeOnboarding(screen: screen, calendarAutoAdd: calendar, search: search)
             dismiss()
         }
     }

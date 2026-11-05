@@ -35,6 +35,8 @@ final class PerceptionController {
         static let calendarAutoAdd = "vision.calendar.autoAdd"
         static let onboardingDone = "vision.onboarding.done"
         static let excludedApps = "vision.excludedApps"
+        static let searchEnabled = "mind.search.enabled"
+        static let homeArea = "mind.homeArea"
     }
 
     @ObservationIgnored let system: PerceptionSystem
@@ -63,6 +65,10 @@ final class PerceptionController {
     private(set) var onboardingDone = false
     /// Applications supplémentaires à ne jamais lire (séparées par des virgules).
     var excludedApps: String { didSet { defaults.set(excludedApps, forKey: Keys.excludedApps) } }
+    /// Recherche en ligne (lieux, avec Apple Plans) autorisée par l'utilisateur.
+    private(set) var searchEnabled = false
+    /// Quartier ou ville de l'utilisateur : sert pour « chez nous ». Reste sur ce Mac.
+    var homeArea: String { didSet { defaults.set(homeArea, forKey: Keys.homeArea) } }
     var lastError: String?
     var googleClientID: String {
         didSet { defaults.set(googleClientID, forKey: Keys.clientID) }
@@ -97,11 +103,16 @@ final class PerceptionController {
         let firstName = NSFullUserName().split(separator: " ").first.map(String.init) ?? NSUserName()
         mind = MindCenter(engine: MindEngine(profile: profile, brain: brain.engine, context: context.engine, trust: system.trust,
                                              models: [OnDeviceLanguageModel(), GatewayLanguageModel(gateway: gateway)],
-                                             sender: AppleMailSender(), userName: firstName, persistent: persistent))
+                                             sender: AppleMailSender(), userName: firstName,
+                                             searcher: MapKitPlaceSearcher(),
+                                             homeArea: { [defaults] in defaults.string(forKey: "mind.homeArea") },
+                                             persistent: persistent))
         screenEnabled = defaults.bool(forKey: Keys.screenEnabled)
         calendarAutoAdd = defaults.bool(forKey: Keys.calendarAutoAdd)
         onboardingDone = defaults.bool(forKey: Keys.onboardingDone)
         excludedApps = defaults.string(forKey: Keys.excludedApps) ?? ""
+        searchEnabled = defaults.bool(forKey: Keys.searchEnabled)
+        homeArea = defaults.string(forKey: Keys.homeArea) ?? ""
         screenPermission = ScreenCaptureKitFrameSource.hasPermission
         externalModelEnabled = defaults.bool(forKey: Keys.externalModel)
         hasModelKey = ((try? secrets.load(AnthropicProvider.secretKey)) ?? nil) != nil
@@ -161,6 +172,9 @@ final class PerceptionController {
         if calendarAutoAdd, !(await system.trust.isAuthorized(CalendarAgent.sourceID, .writeCalendar)) {
             calendarAutoAdd = false; defaults.set(false, forKey: Keys.calendarAutoAdd); lost.append("d'ajouter à l'agenda")
         }
+        if searchEnabled, !(await system.trust.isAuthorized(MindEngine.searchSource, .searchOnline)) {
+            searchEnabled = false; defaults.set(false, forKey: Keys.searchEnabled); lost.append("de chercher en ligne")
+        }
         if !lost.isEmpty {
             lastError = "L'autorisation " + lost.joined(separator: " et ") + " n'était plus enregistrée (une autre copie de GHOST a probablement écrasé le fichier des autorisations). Réactivez-la dans Sources ▸ Écran et Agenda."
         }
@@ -207,12 +221,21 @@ final class PerceptionController {
         defaults.set(enabled, forKey: Keys.calendarAutoAdd)
     }
 
+    /// Autorise (ou retire) la recherche en ligne. Seuls la question et la zone sont transmis à Apple Plans.
+    func setSearchEnabled(_ enabled: Bool) async {
+        if enabled { await system.trust.grant(MindEngine.searchSource, permission: .searchOnline, scope: "Apple Plans") }
+        else { await system.trust.revoke(MindEngine.searchSource) }
+        searchEnabled = enabled
+        defaults.set(enabled, forKey: Keys.searchEnabled)
+    }
+
     /// Fin de l'écran de consentement : le choix de l'utilisateur, tel quel.
-    func completeOnboarding(screen: Bool, calendarAutoAdd: Bool) async {
+    func completeOnboarding(screen: Bool, calendarAutoAdd: Bool, search: Bool = false) async {
         onboardingDone = true
         defaults.set(true, forKey: Keys.onboardingDone)
         if screen { await setScreenObservation(true) }
         if calendarAutoAdd { await setCalendarAutoAdd(true) }
+        if search { await setSearchEnabled(true) }
     }
 
     // MARK: - E-mail
