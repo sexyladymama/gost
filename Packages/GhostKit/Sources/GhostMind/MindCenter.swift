@@ -26,6 +26,7 @@ public final class MindCenter {
     deinit { listener?.cancel() }
 
     public var drafts: [MailDraft] { state.drafts.values.sorted { $0.createdAt > $1.createdAt } }
+    public var creations: [Creation] { state.creations.values.filter { !$0.hidden }.sorted { $0.updatedAt > $1.updatedAt } }
     public var searches: [PlaceSearch] { state.searches.values.filter { !$0.hidden }.sorted { $0.searchedAt > $1.searchedAt } }
     public var pending: [MailDraft] { drafts.filter { [.ready, .needsModel, .failed].contains($0.status) } }
 

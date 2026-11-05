@@ -20,6 +20,7 @@ public actor MindEngine: PerceptionEventConsumer {
     private let models: [LanguageModel]
     private let sender: MailSender
     private let searcher: PlaceSearcher?
+    private let output: OutputWriter?
     private let homeArea: @Sendable () -> String?
     private let url: URL?
     private let userName: String
@@ -28,10 +29,10 @@ public actor MindEngine: PerceptionEventConsumer {
     public private(set) var autonomous = true
 
     public init(profile: GhostProfile, brain: BrainEngine, context: ContextEngine, trust: TrustEngine, models: [LanguageModel],
-                sender: MailSender, userName: String, searcher: PlaceSearcher? = nil, homeArea: @escaping @Sendable () -> String? = { nil },
+                sender: MailSender, userName: String, searcher: PlaceSearcher? = nil, output: OutputWriter? = nil, homeArea: @escaping @Sendable () -> String? = { nil },
                 persistent: Bool = true, clock: @escaping @Sendable () -> Date = { Date() }) {
         self.brain = brain; self.context = context; self.trust = trust; self.models = models; self.sender = sender
-        self.searcher = searcher; self.homeArea = homeArea
+        self.searcher = searcher; self.output = output; self.homeArea = homeArea
         self.userName = userName; self.clock = clock
         url = persistent ? profile.directory.appendingPathComponent("mind.json") : nil
         (updates, continuation) = AsyncStream.makeStream(of: MindUpdate.self, bufferingPolicy: .bufferingNewest(20))
@@ -78,8 +79,12 @@ public actor MindEngine: PerceptionEventConsumer {
             try await draftMail(mission: mission, request: request, recipient: recipient, topic: topic)
         case .findPlaces(let query, let area, let when):
             try await searchPlaces(mission: mission, request: request, query: query, area: area, when: when)
-        case .createLogo, .createDocument, .unsupported:
-            return   // outils suivants ; la mission reste simplement proposée dans « Missions »
+        case .createLogo(let brief):
+            try await createArtifact(mission: mission, request: request, kind: .logo, brief: brief)
+        case .createDocument(let brief):
+            try await createArtifact(mission: mission, request: request, kind: .document, brief: brief)
+        case .unsupported:
+            return   // la mission reste simplement proposée dans « Missions »
         }
     }
 
@@ -133,6 +138,79 @@ public actor MindEngine: PerceptionEventConsumer {
         let simple = EmailDrafter.simplified(recipient: recipientName, topic: topic, user: userName)
         return Made(subject: simple.subject, body: simple.body, by: "brouillon simplifié (sans IA)", usedModel: false,
                     note: "Brouillon simplifié : " + (firstReason ?? "aucun modèle de langage disponible.") + " Utilisez « Refaire » une fois le modèle disponible.")
+    }
+
+    // MARK: Création (logos, documents)
+
+    private func createArtifact(mission: Mission, request: String, kind: CreationKind, brief: String) async throws {
+        let id = String(Digest.sha256(Data(("create|" + mission.id).utf8)).map { String(format: "%02x", $0) }.joined().prefix(24))
+        let creation = await runCreation(id: id, missionID: mission.id, kind: kind, request: request, brief: brief, version: 1, createdAt: clock())
+        var s = try load()
+        s.creations[id] = creation; s.handled[mission.id] = id
+        try save(s)
+    }
+
+    private func runCreation(id: String, missionID: String, kind: CreationKind, request: String, brief: String, version: Int, createdAt: Date) async -> Creation {
+        var title = kind == .logo ? "Logo" : "Document"
+        func make(_ status: CreationStatus, paths: [String] = [], by: String? = nil, note: String? = nil) -> Creation {
+            Creation(id: id, missionID: missionID, kind: kind, title: title, basis: request, status: status, paths: paths, generatedBy: by, note: note,
+                     version: version, hidden: false, createdAt: createdAt, updatedAt: clock())
+        }
+        guard let output, output.folderName != nil else {
+            return make(.needsFolder, note: "Choisissez le dossier où GHOST range ce qu'il crée (Sources ▸ Création), puis « Refaire ».")
+        }
+        var reason: String?
+        for model in models {
+            if case .unavailable(let r) = await model.availability() { reason = reason ?? r; continue }
+            var prompt = CreationPrompts.prompt(request: request, brief: brief)
+            var mask: ReversibleMask?
+            if !model.isLocal {
+                let masked = ReversibleMask.mask(prompt, names: [userName] + userName.split(separator: " ").map(String.init).filter { $0.count > 2 }, emails: [])
+                prompt = masked.0; mask = masked.1
+            }
+            do {
+                let raw = try await model.generate(system: kind == .logo ? CreationPrompts.logoSystem : CreationPrompts.documentSystem, prompt: prompt)
+                let text = mask?.restore(raw) ?? raw
+                let by = model.name + (model.isSimulated ? " (SIMULÉ)" : "")
+                #if canImport(AppKit)
+                if kind == .logo {
+                    guard let svg = SVGGuard.extract(text) else { reason = reason ?? "Le modèle n'a pas produit de SVG."; continue }
+                    if let problem = SVGGuard.problem(svg) { reason = reason ?? problem; continue }
+                    let rendered = SVGGuard.render(svg)
+                    guard let png = rendered.png else { reason = reason ?? rendered.problem; continue }
+                    let name = "Logo GHOST"
+                    let svgURL = try output.write(Data(svg.utf8), preferredName: name + ".svg")
+                    let pngURL = try output.write(png, preferredName: ((svgURL.lastPathComponent as NSString).deletingPathExtension) + ".png")
+                    return make(.done, paths: [svgURL.path, pngURL.path], by: by)
+                } else {
+                    guard CreationPrompts.validDocument(text), let rtf = MarkdownRTF.render(text) else { reason = reason ?? "Document inexploitable."; continue }
+                    title = CreationPrompts.title(fromMarkdown: text, fallback: "Document")
+                    let url = try output.write(rtf, preferredName: title + ".rtf")
+                    return make(.done, paths: [url.path], by: by)
+                }
+                #endif
+            } catch { reason = reason ?? error.localizedDescription }
+        }
+        return make(models.isEmpty || reason == nil || reason?.contains("Apple Intelligence") == true ? .needsModel : .failed,
+                    note: (reason ?? "Aucun modèle de langage disponible.") + " Rien n'a été inventé : « Refaire » dès que c'est possible.")
+    }
+
+    public func redoCreation(_ id: String) async throws {
+        var s = try load()
+        guard let old = s.creations[id] else { throw MindError.invalid("Création introuvable.") }
+        var brief = old.basis
+        switch IntentClassifier.classify(old.basis) { case .createLogo(let b), .createDocument(let b): brief = b; default: break }
+        var new = await runCreation(id: id, missionID: old.missionID, kind: old.kind, request: old.basis, brief: brief, version: old.version + 1, createdAt: old.createdAt)
+        new.paths = old.status == .done && new.status != .done ? old.paths : new.paths   // l'ancienne version reste consultable si la nouvelle échoue
+        s.creations[id] = new
+        try save(s); publish()
+    }
+
+    public func hideCreation(_ id: String) throws {
+        var s = try load()
+        guard var creation = s.creations[id] else { throw MindError.invalid("Création introuvable.") }
+        creation.hidden = true; s.creations[id] = creation
+        try save(s); publish()
     }
 
     // MARK: Recherche de lieux
@@ -267,7 +345,9 @@ public actor MindEngine: PerceptionEventConsumer {
         var s = try load()
         let orphans = s.drafts.filter { !alive.contains($0.value.missionID) }.map(\.key)
         let orphanSearches = s.searches.filter { !alive.contains($0.value.missionID) }.map(\.key)
-        guard !orphans.isEmpty || !orphanSearches.isEmpty else { return }
+        let orphanCreations = s.creations.filter { !alive.contains($0.value.missionID) }.map(\.key)
+        guard !orphans.isEmpty || !orphanSearches.isEmpty || !orphanCreations.isEmpty else { return }
+        for id in orphanCreations { s.creations[id] = nil }   // les fichiers déjà créés restent dans le dossier de l'utilisateur
         for id in orphans { s.drafts[id] = nil }
         for id in orphanSearches { s.searches[id] = nil }
         s.handled = s.handled.filter { alive.contains($0.key) }

@@ -96,15 +96,44 @@ public struct PlaceSearch: Codable, Identifiable, Hashable, Sendable {
     public var searchedAt: Date
 }
 
+public enum CreationKind: String, Codable, Sendable { case logo, document }
+
+public enum CreationStatus: String, Codable, Sendable {
+    case done
+    /// Aucun modèle de langage disponible : rien n'est inventé, « Refaire » une fois le modèle disponible.
+    case needsModel
+    /// Aucun dossier de création choisi par l'utilisateur.
+    case needsFolder
+    case failed
+}
+
+public struct Creation: Codable, Identifiable, Hashable, Sendable {
+    public var id: String
+    public var missionID: String
+    public var kind: CreationKind
+    public var title: String
+    public var basis: String
+    public var status: CreationStatus
+    /// Chemins complets des fichiers créés (jamais écrasés : une nouvelle version porte un nouveau nom).
+    public var paths: [String]
+    public var generatedBy: String?
+    public var note: String?
+    public var version: Int
+    public var hidden: Bool
+    public var createdAt: Date
+    public var updatedAt: Date
+}
+
 public struct MindState: Codable, Sendable {
     public var schemaVersion = 1
     public var drafts: [String: MailDraft] = [:]
     /// Missions déjà traitées (clé : identifiant de mission) : un travail n'est jamais recréé en double.
     public var handled: [String: String] = [:]
     public var searches: [String: PlaceSearch] = [:]
+    public var creations: [String: Creation] = [:]
     public init() {}
 
-    private enum Keys: String, CodingKey { case schemaVersion, drafts, handled, searches }
+    private enum Keys: String, CodingKey { case schemaVersion, drafts, handled, searches, creations }
     /// Décodage tolérant : un fichier écrit avant l'ajout d'un champ reste lisible.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -112,6 +141,7 @@ public struct MindState: Codable, Sendable {
         drafts = try c.decodeIfPresent([String: MailDraft].self, forKey: .drafts) ?? [:]
         handled = try c.decodeIfPresent([String: String].self, forKey: .handled) ?? [:]
         searches = try c.decodeIfPresent([String: PlaceSearch].self, forKey: .searches) ?? [:]
+        creations = try c.decodeIfPresent([String: Creation].self, forKey: .creations) ?? [:]
     }
 }
 

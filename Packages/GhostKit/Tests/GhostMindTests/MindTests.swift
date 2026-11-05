@@ -338,3 +338,136 @@ final class PlaceSearchTests: XCTestCase {
         XCTAssertTrue(log.contains { $0.operation == "places.search" && $0.target.contains("bars") })
     }
 }
+
+// MARK: - Création (logos, documents)
+
+private let goodSVG = """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#0b0f14"/><circle cx="256" cy="256" r="150" fill="none" stroke="#8fc7ff" stroke-width="28"/><path d="M180 300 L256 170 L332 300 Z" fill="#8fc7ff"/></svg>
+"""
+private let goodDocument = "# Lettre de motivation\n\nMadame, Monsieur,\n\nJe vous écris pour vous faire part de mon intérêt pour le poste proposé au sein de votre équipe. Mon parcours m'a préparé à relever ce type de défi.\n\n- Rigueur\n- Curiosité\n\nBien cordialement,\nRomain"
+
+final class SVGGuardTests: XCTestCase {
+    func testValidSVGIsAcceptedAndRenderedToARealImage() throws {
+        XCTAssertNil(SVGGuard.problem(goodSVG))
+        XCTAssertEqual(SVGGuard.extract("Voici le logo :\n```svg\n" + goodSVG + "\n```"), goodSVG.trimmingCharacters(in: .whitespacesAndNewlines))
+        let rendered = SVGGuard.render(goodSVG)
+        let png = try XCTUnwrap(rendered.png, rendered.problem ?? "")
+        XCTAssertGreaterThan(png.count, 1_000)
+        XCTAssertEqual(Array(png.prefix(4)), [0x89, 0x50, 0x4E, 0x47], "signature PNG")
+    }
+    func testDangerousOrBrokenSVGIsRejected() {
+        XCTAssertNotNil(SVGGuard.problem(#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><script>alert(1)</script></svg>"#))
+        XCTAssertNotNil(SVGGuard.problem(#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" onload="x()"></svg>"#))
+        XCTAssertNotNil(SVGGuard.problem(#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10"><image xlink:href="https://evil.example/a.png"/></svg>"#))
+        XCTAssertNotNil(SVGGuard.problem(#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><a href="https://evil.example"><rect width="5" height="5"/></a></svg>"#))
+        XCTAssertNotNil(SVGGuard.problem(#"<!DOCTYPE svg [<!ENTITY x "y">]><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>"#))
+        XCTAssertNotNil(SVGGuard.problem("<svg viewBox=\"0 0 10 10\"><rect></svg>"), "mal formé")
+        XCTAssertNotNil(SVGGuard.problem(#"<svg xmlns="http://www.w3.org/2000/svg"><rect width="5" height="5"/></svg>"#), "sans dimensions")
+        XCTAssertNotNil(SVGGuard.problem("<svg viewBox=\"0 0 1 1\">" + String(repeating: "<g/>", count: 700) + "</svg>"), "trop complexe")
+        XCTAssertNil(SVGGuard.extract("aucun dessin ici"))
+    }
+    func testBlankLogoIsRejectedAfterRendering() {
+        let blank = #"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="none"/></svg>"#
+        XCTAssertNil(SVGGuard.problem(blank))
+        XCTAssertNil(SVGGuard.render(blank).png, "un logo vide n'est jamais enregistré")
+        let flat = ##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#ff0000"/></svg>"##
+        XCTAssertNil(SVGGuard.render(flat).png, "un aplat uni n'est pas un logo")
+    }
+}
+
+final class FolderOutputWriterTests: XCTestCase {
+    func testNeverOverwritesAndStaysInsideTheFolder() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ghost-out-\(UUID())")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let writer = FolderOutputWriter(folder: dir)
+        let a = try writer.write(Data("un".utf8), preferredName: "Logo.svg")
+        let b = try writer.write(Data("deux".utf8), preferredName: "Logo.svg")
+        XCTAssertEqual(a.lastPathComponent, "Logo.svg"); XCTAssertEqual(b.lastPathComponent, "Logo (2).svg")
+        XCTAssertEqual(try String(contentsOf: a), "un", "le premier fichier est intact")
+        let sneaky = try writer.write(Data("x".utf8), preferredName: "../../etc/passwd")
+        XCTAssertEqual(sneaky.deletingLastPathComponent().standardizedFileURL.path, dir.standardizedFileURL.path)
+        XCTAssertEqual(writer.folderName, dir.lastPathComponent)
+        XCTAssertThrowsError(try FolderOutputWriter().write(Data("x".utf8), preferredName: "a.txt"), "aucun dossier choisi")
+    }
+}
+
+final class CreationTests: XCTestCase {
+    private func make(models: [LanguageModel], withFolder: Bool = true) async throws -> (MindEngine, Env, URL) {
+        let env = try await Env.make(models: [])
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ghost-create-\(UUID())")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let writer = FolderOutputWriter(folder: withFolder ? dir : nil)
+        let mind = MindEngine(profile: GhostProfile(id: "create", baseDirectory: FileManager.default.temporaryDirectory), brain: env.brain, context: env.context,
+                              trust: env.trust, models: models, sender: env.sender, userName: "Romain", output: writer, persistent: false, clock: { now })
+        return (mind, env, dir)
+    }
+    private func creation(_ mind: MindEngine) async throws -> Creation {
+        let state = try await mind.snapshot()
+        return try XCTUnwrap(state.creations.values.first)
+    }
+
+    func testLogoIsDrawnValidatedRenderedAndSavedWithoutOverwriting() async throws {
+        let model = ScriptedModel(reply: { _ in "Voici votre logo :\n" + goodSVG })
+        let (mind, env, dir) = try await make(models: [model]); defer { try? FileManager.default.removeItem(at: dir) }
+        let event = try await env.request("Crée un logo pour la boîte")
+        await mind.consume([event])
+        let c = try await creation(mind)
+        XCTAssertEqual(c.status, .done); XCTAssertEqual(c.kind, .logo); XCTAssertEqual(c.paths.count, 2)
+        XCTAssertTrue(c.paths.allSatisfy { FileManager.default.fileExists(atPath: $0) && $0.hasPrefix(dir.path) })
+        XCTAssertTrue(c.paths.contains { $0.hasSuffix(".svg") } && c.paths.contains { $0.hasSuffix(".png") })
+        XCTAssertTrue(c.generatedBy?.contains("SIMULÉ") ?? false)
+        await mind.consume([event])
+        let again = try await mind.snapshot(); XCTAssertEqual(again.creations.count, 1)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).count, 2, "une demande = un seul jeu de fichiers")
+        try await mind.redoCreation(c.id)
+        let redone = try await creation(mind)
+        XCTAssertEqual(redone.version, 2)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).count, 4, "la nouvelle version ne remplace pas l'ancienne")
+        for p in c.paths { XCTAssertTrue(FileManager.default.fileExists(atPath: p)) }
+    }
+
+    func testDocumentIsWrittenAsReadableRTF() async throws {
+        let (mind, env, dir) = try await make(models: [ScriptedModel(reply: { _ in goodDocument })]); defer { try? FileManager.default.removeItem(at: dir) }
+        await mind.consume([try await env.request("Rédige une lettre de motivation pour Safran")])
+        let c = try await creation(mind)
+        XCTAssertEqual(c.status, .done); XCTAssertEqual(c.title, "Lettre de motivation")
+        let path = try XCTUnwrap(c.paths.first); XCTAssertTrue(path.hasSuffix("Lettre de motivation.rtf"))
+        let text = try NSAttributedString(url: URL(fileURLWithPath: path), options: [:], documentAttributes: nil).string
+        XCTAssertTrue(text.contains("Lettre de motivation") && text.contains("Madame, Monsieur") && text.contains("• Rigueur"), text)
+        XCTAssertFalse(text.contains("# "), "le Markdown est mis en forme, pas affiché tel quel")
+    }
+
+    func testNothingIsInventedWithoutAModelOrWithoutAFolder() async throws {
+        let off = ScriptedModel(state: .unavailable("Apple Intelligence n'est pas activé : Réglages Système ▸ Apple Intelligence et Siri."), reply: { _ in goodSVG })
+        let (noModel, env, dir) = try await make(models: [off]); defer { try? FileManager.default.removeItem(at: dir) }
+        await noModel.consume([try await env.request("Crée un logo pour la boîte")])
+        let c = try await creation(noModel)
+        XCTAssertEqual(c.status, .needsModel); XCTAssertTrue(c.paths.isEmpty); XCTAssertTrue(c.note?.contains("Apple Intelligence") ?? false)
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+
+        let model = ScriptedModel(reply: { _ in goodSVG })
+        let (noFolder, env2, dir2) = try await make(models: [model], withFolder: false); defer { try? FileManager.default.removeItem(at: dir2) }
+        await noFolder.consume([try await env2.request("Crée un logo pour la boîte")])
+        let d = try await creation(noFolder)
+        XCTAssertEqual(d.status, .needsFolder); XCTAssertTrue(model.prompts.get().isEmpty, "pas de génération inutile sans dossier")
+    }
+
+    func testUnsafeOrBlankModelOutputIsNeverSaved() async throws {
+        let evil = ScriptedModel(reply: { _ in #"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><script>alert(1)</script></svg>"# })
+        let (mind, env, dir) = try await make(models: [evil]); defer { try? FileManager.default.removeItem(at: dir) }
+        await mind.consume([try await env.request("Crée un logo pour la boîte")])
+        let c = try await creation(mind)
+        XCTAssertNotEqual(c.status, .done); XCTAssertTrue(c.paths.isEmpty); XCTAssertTrue(c.note?.contains("interdit") ?? false, c.note ?? "")
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+    }
+
+    func testExternalModelNeverSeesTheUserName() async throws {
+        let external = ScriptedModel(name: "Externe", isLocal: false, reply: { prompt in
+            XCTAssertFalse(prompt.contains("Romain")); return goodDocument })
+        let (mind, env, dir) = try await make(models: [external]); defer { try? FileManager.default.removeItem(at: dir) }
+        await mind.consume([try await env.request("Rédige une lettre de motivation de la part de Romain pour Safran")])
+        let c = try await creation(mind); XCTAssertEqual(c.status, .done)
+        XCTAssertEqual(external.prompts.get().count, 1)
+    }
+}
