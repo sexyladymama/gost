@@ -17,6 +17,7 @@ final class GhostAppDelegate: NSObject, NSApplicationDelegate {
     /// Le moteur de perception est branché via `GhostCoreInterface`.
     let stateManager: GhostStateManager
     let windows = PerceptionWindowController()
+    private var hotKey: GhostHotKey?
 
     override init() {
         perception = PerceptionController()
@@ -31,6 +32,14 @@ final class GhostAppDelegate: NSObject, NSApplicationDelegate {
             assertionFailure("Impossible de démarrer GHOST : \(error)")
         }
         Task { await perception.restoreSources() }
+        // ⌃⌥⌘G : pause / reprise immédiate, depuis n'importe quelle application.
+        hotKey = GhostHotKey { [weak self] in
+            guard let self else { return }
+            if self.stateManager.state == .stopped { try? self.stateManager.start() }
+            else if self.stateManager.canTogglePause { try? self.stateManager.togglePause() }
+        }
+        // Premier lancement : l'écran de consentement s'ouvre ; GHOST ne regarde rien tant que l'utilisateur n'a pas accepté.
+        if !perception.onboardingDone { windows.show(stateManager: stateManager, perception: perception) }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

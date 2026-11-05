@@ -18,6 +18,24 @@ public struct EventNormalizer: Sendable {
         switch raw {
         case let .email(message, account):
             return normalize(message, account: account, source: source)
+        case let .screen(snapshot):
+            var metadata = snapshot.metadata
+            metadata["origin"] = "screen"
+            metadata["app"] = snapshot.app
+            if let title = snapshot.windowTitle { metadata["window"] = title }
+            return NormalizedObservation(
+                source: source,
+                externalID: snapshot.contentKey,
+                version: "1",
+                occurredAt: snapshot.capturedAt,
+                title: snapshot.windowTitle?.isEmpty == false ? snapshot.windowTitle! : snapshot.app,
+                text: String(snapshot.text.prefix(textLimit)),
+                people: [],
+                content: .message,
+                isAutomated: false,
+                isReply: false,
+                userIsDirectRecipient: nil,
+                metadata: metadata)
         case let .file(change):
             return NormalizedObservation(
                 source: source,

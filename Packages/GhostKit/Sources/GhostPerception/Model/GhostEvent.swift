@@ -39,6 +39,17 @@ public enum GhostEventKind: String, Codable, CaseIterable, Sendable, Comparable 
 public enum SourceKind: String, Codable, Sendable {
     case email
     case folder
+    /// Texte lu à l'écran (blocs utiles uniquement, jamais d'image).
+    case screen
+
+    /// Permission que l'utilisateur doit avoir accordée pour qu'une source de ce type soit lue.
+    public var requiredPermission: Permission {
+        switch self {
+        case .email: return .readMail
+        case .folder: return .watchFolder
+        case .screen: return .observeScreen
+        }
+    }
 }
 
 /// Identifiant stable d'une source configurée (ex. `gmail`, `folder.main`).

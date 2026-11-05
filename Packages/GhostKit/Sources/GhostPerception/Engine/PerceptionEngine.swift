@@ -116,7 +116,7 @@ public actor PerceptionEngine {
         for id in order {
             guard let registration = registrations[id] else { continue }
             let descriptor = registration.source.descriptor
-            let permission: Permission = descriptor.kind == .email ? .readMail : .watchFolder
+            let permission: Permission = descriptor.kind.requiredPermission
             result.append(SourceStatus(descriptor: descriptor, isEnabled: registration.isEnabled,
                                        isAuthorized: await trust.isAuthorized(id, permission),
                                        lastPoll: registration.lastPoll, lastSuccess: registration.lastSuccess,

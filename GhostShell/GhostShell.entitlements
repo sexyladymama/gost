@@ -14,6 +14,9 @@
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
 	<!-- Mémorisation de ce choix entre deux lancements (signet en lecture seule). -->
+	<!-- Mission 006 : ajout au calendrier de l'utilisateur (EventKit), après son consentement et celui de macOS. -->
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
 	<key>com.apple.security.files.bookmarks.app-scope</key>
 	<true/>
 	<!-- Aucune autre autorisation : pas de caméra, micro, contacts,

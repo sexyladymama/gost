@@ -114,7 +114,7 @@ public actor BrainEngine: PerceptionEventConsumer {
             outcome = consulted.outcome; engine = "rules+model"; provider = consulted.provider; simulated = consulted.simulated
         }
         guard isActive else { return nil }
-        try await trust.require(event.source.id, event.source.kind == .email ? .readMail : .watchFolder,
+        try await trust.require(event.source.id, event.source.kind.requiredPermission,
                                 operation: "brain.commit", target: event.source.displayName)
         let record = DecisionRecord(date: input.now, kind: outcome.kind, missionID: outcome.missionID, eventIDs: [event.id],
                                     usedElements: outcome.used, reasons: outcome.reasons, confidence: outcome.confidence,

@@ -11,6 +11,8 @@ struct GhostDashboard: View {
 
     let stateManager: GhostStateManager
     let center: PerceptionCenter
+    /// L'observation de l'écran est activée par l'utilisateur.
+    var screenObservation = false
     @AppStorage(GhostAppearance.storageKey) private var appearanceRaw = GhostAppearance.dark.rawValue
 
     /// Ouvre la fenêtre GHOST Perception.
@@ -23,6 +25,7 @@ struct GhostDashboard: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             statusRow.padding(12).ghostGlass(cornerRadius: 14)
+            screenRow
             perceptionSummary.padding(12).ghostGlass(cornerRadius: 14)
             controls
         }
@@ -56,6 +59,20 @@ struct GhostDashboard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Statut : \(stateManager.state.displayName)")
+    }
+
+    private var screenRow: some View {
+        let watching = screenObservation && stateManager.state == .active
+        return HStack(spacing: 8) {
+            Image(systemName: watching ? "eye.fill" : "eye.slash").foregroundStyle(watching ? GhostTheme.accent : GhostTheme.dim)
+            Text(watching ? "GHOST regarde l'écran" : (screenObservation ? "Écran en pause" : "Écran non observé"))
+                .font(.system(.callout, design: .monospaced))
+            Spacer()
+            Text("⌃⌥⌘G").font(.caption.monospaced()).foregroundStyle(GhostTheme.dim)
+        }
+        .padding(.horizontal, 12)
+        .help("Raccourci global : pause immédiate de GHOST, depuis n'importe quelle application")
+        .accessibilityElement(children: .combine)
     }
 
     private var perceptionSummary: some View {

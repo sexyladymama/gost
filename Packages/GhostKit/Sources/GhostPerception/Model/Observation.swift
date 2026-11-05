@@ -72,10 +72,30 @@ public struct FileMetadata: Codable, Hashable, Sendable {
     }
 }
 
+/// Bloc de texte retenu à l'écran. Ni capture d'écran ni texte complet : uniquement un bloc jugé utile,
+/// déjà borné et débarrassé des données sensibles.
+public struct ScreenSnapshot: Codable, Hashable, Sendable {
+    public var app: String
+    public var bundleID: String?
+    public var windowTitle: String?
+    public var text: String
+    /// Clé stable (même contenu = même clé) : un message qui reste affiché n'est traité qu'une fois.
+    public var contentKey: String
+    public var capturedAt: Date
+    public var metadata: [String: String]
+
+    public init(app: String, bundleID: String? = nil, windowTitle: String? = nil, text: String,
+                contentKey: String, capturedAt: Date, metadata: [String: String] = [:]) {
+        self.app = app; self.bundleID = bundleID; self.windowTitle = windowTitle; self.text = text
+        self.contentKey = contentKey; self.capturedAt = capturedAt; self.metadata = metadata
+    }
+}
+
 /// Observation brute produite par une source, avant normalisation.
 public enum RawObservation: Hashable, Sendable {
     case email(EmailMessage, account: String?)
     case file(FileChange)
+    case screen(ScreenSnapshot)
 }
 
 /// Format commun à toutes les sources, produit par l'``EventNormalizer``.

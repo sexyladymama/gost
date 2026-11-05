@@ -30,7 +30,7 @@ public actor ContextEngine: PerceptionEventConsumer {
         try ensureLoaded()
         var permitted: [GhostEvent] = []
         for event in events {
-            let permission: Permission = event.source.kind == .email ? .readMail : .watchFolder
+            let permission: Permission = event.source.kind.requiredPermission
             // Contrôle indépendant du fait que Perception a déjà vérifié la source.
             try await trust.require(event.source.id, permission, operation: "context.ingest", target: event.source.displayName)
             permitted.append(event)

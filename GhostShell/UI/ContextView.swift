@@ -104,6 +104,7 @@ struct ScopeClassifier: View {
             HStack(spacing: 24) {
                 if perception.emailMode != .none { picker("E-mail", id: perception.gmailID) }
                 if perception.folderURL != nil { picker("Dossier", id: perception.folderID) }
+                if perception.screenEnabled { picker("Écran", id: perception.screenID) }
                 if perception.emailMode == .none && perception.folderURL == nil {
                     Text("Aucune source autorisée.").foregroundStyle(.secondary)
                 }

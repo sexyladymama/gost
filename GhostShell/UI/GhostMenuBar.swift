@@ -16,12 +16,13 @@ struct GhostMenuBar: Scene {
 
     var body: some Scene {
         MenuBarExtra {
-            GhostDashboard(stateManager: stateManager, center: perception.center,
+            GhostDashboard(stateManager: stateManager, center: perception.center, screenObservation: perception.screenEnabled,
                            onOpenPerception: openPerception, onQuit: quit)
         } label: {
             let unseen = perception.center.unseenImportant.count
             HStack(spacing: 2) {
                 Image(systemName: stateManager.state.symbolName)
+                if perception.screenEnabled && stateManager.state == .active { Image(systemName: "eye.fill").font(.system(size: 8)) }
                 if unseen > 0 { Text("\(unseen)") }
             }
             .accessibilityLabel("GHOST — \(stateManager.state.displayName), \(unseen) événement(s) important(s)")

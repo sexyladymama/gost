@@ -5,6 +5,8 @@ import GhostPerception
 import GhostContext
 import GhostBrain
 import GhostAutonomy
+import GhostVision
+import CoreGraphics
 
 /// Configure et pilote les sources de perception depuis l'interface.
 ///
@@ -28,6 +30,10 @@ final class PerceptionController {
         static let account = "perception.gmail.account"
         static let folderBookmark = "perception.folder.bookmark"
         static let externalModel = "brain.externalModel.enabled"
+        static let screenEnabled = "vision.screen.enabled"
+        static let calendarAutoAdd = "vision.calendar.autoAdd"
+        static let onboardingDone = "vision.onboarding.done"
+        static let excludedApps = "vision.excludedApps"
     }
 
     @ObservationIgnored let system: PerceptionSystem
@@ -35,6 +41,8 @@ final class PerceptionController {
     let context: ContextCenter
     let brain: BrainCenter
     let execution: ExecutionCenter
+    let calendar: CalendarCenter
+    @ObservationIgnored let calendarWriter: CalendarWriter
     @ObservationIgnored private var executionAccess: [String: [SecurityScopedFolder]] = [:]
     @ObservationIgnored private let gateway: ModelGateway
 
@@ -45,12 +53,20 @@ final class PerceptionController {
     /// Modèle externe : désactivé par défaut ; ne reçoit que des données masquées.
     private(set) var externalModelEnabled = false
     private(set) var hasModelKey = false
+    /// Observation de l'écran (choix de l'utilisateur, consentement donné à l'installation).
+    private(set) var screenEnabled = false
+    /// Permission « Enregistrement de l'écran » de macOS (accordée par l'utilisateur dans Réglages Système, jamais par GHOST).
+    private(set) var screenPermission = false
+    private(set) var calendarAutoAdd = false
+    private(set) var onboardingDone = false
+    /// Applications supplémentaires à ne jamais lire (séparées par des virgules).
+    var excludedApps: String { didSet { defaults.set(excludedApps, forKey: Keys.excludedApps) } }
     var lastError: String?
     var googleClientID: String {
         didSet { defaults.set(googleClientID, forKey: Keys.clientID) }
     }
 
-    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored private let secrets: SecretStore
     @ObservationIgnored private var folderAccess: SecurityScopedFolder?
 
@@ -70,6 +86,16 @@ final class PerceptionController {
         brain = BrainCenter(engine: BrainEngine(profile: profile, context: context.engine, trust: system.trust,
                                                 gateway: gateway, persistent: persistent))
         execution = ExecutionCenter(engine: ExecutionEngine(profile: profile, brain: brain.engine, persistent: persistent), profileID: profile.id)
+        let writer = EventKitCalendarWriter()
+        calendarWriter = writer
+        calendar = CalendarCenter(agent: CalendarAgent(writer: writer, trust: system.trust,
+                                                       ledgerURL: persistent ? profile.directory.appendingPathComponent("calendar-actions.json") : nil),
+                                  writer: writer)
+        screenEnabled = defaults.bool(forKey: Keys.screenEnabled)
+        calendarAutoAdd = defaults.bool(forKey: Keys.calendarAutoAdd)
+        onboardingDone = defaults.bool(forKey: Keys.onboardingDone)
+        excludedApps = defaults.string(forKey: Keys.excludedApps) ?? ""
+        screenPermission = ScreenCaptureKitFrameSource.hasPermission
         externalModelEnabled = defaults.bool(forKey: Keys.externalModel)
         hasModelKey = ((try? secrets.load(AnthropicProvider.secretKey)) ?? nil) != nil
         emailMode = EmailMode(rawValue: defaults.string(forKey: Keys.emailMode) ?? "") ?? .none
@@ -77,6 +103,7 @@ final class PerceptionController {
         gmailAccount = defaults.string(forKey: Keys.account)
     }
 
+    var screenID: SourceID { SourceID("screen") }
     var gmailID: SourceID { PerceptionSystem.gmailSourceID }
     var folderID: SourceID { PerceptionSystem.folderSourceID }
 
@@ -97,6 +124,7 @@ final class PerceptionController {
         case .none:
             break
         }
+        if screenEnabled { await registerScreenSource() }
         if let bookmark = defaults.data(forKey: Keys.folderBookmark) {
             do {
                 let access = try SecurityScopedFolder(bookmark: bookmark)
@@ -110,6 +138,57 @@ final class PerceptionController {
                 lastError = "Le dossier autorisé n'est plus accessible : \(error.localizedDescription)"
             }
         }
+    }
+
+    // MARK: - Écran et agenda
+
+    private func registerScreenSource() async {
+        let extras = Set(excludedApps.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+        let source = ScreenSource(frames: ScreenCaptureKitFrameSource(), recognizer: VisionTextRecognizer(),
+                                  policy: PrivacyPolicy(extraExcludedApps: extras), trust: system.trust)
+        await center.register(source)
+    }
+
+    func refreshScreenPermission() async {
+        screenPermission = ScreenCaptureKitFrameSource.hasPermission
+        await calendar.reload()
+    }
+
+    /// Active ou coupe l'observation de l'écran. L'autorisation macOS est demandée au système : seul l'utilisateur peut l'accorder.
+    func setScreenObservation(_ enabled: Bool) async {
+        lastError = nil
+        if enabled {
+            await system.trust.grant(screenID, permission: .observeScreen, scope: "écran")
+            if !ScreenCaptureKitFrameSource.hasPermission { _ = CGRequestScreenCaptureAccess() }
+            screenPermission = ScreenCaptureKitFrameSource.hasPermission
+            screenEnabled = true
+            defaults.set(true, forKey: Keys.screenEnabled)
+            await registerScreenSource()
+        } else {
+            screenEnabled = false
+            defaults.set(false, forKey: Keys.screenEnabled)
+            await center.revoke(screenID, deleteData: false, retainContext: true)
+        }
+    }
+
+    /// Autorise (ou retire) l'ajout automatique à l'agenda. L'accès complet à l'agenda reste soumis à macOS.
+    func setCalendarAutoAdd(_ enabled: Bool) async {
+        if enabled {
+            await calendar.requestAccess()
+            await system.trust.grant(CalendarAgent.sourceID, permission: .writeCalendar, scope: "agenda")
+        } else {
+            await system.trust.revoke(CalendarAgent.sourceID)
+        }
+        calendarAutoAdd = enabled
+        defaults.set(enabled, forKey: Keys.calendarAutoAdd)
+    }
+
+    /// Fin de l'écran de consentement : le choix de l'utilisateur, tel quel.
+    func completeOnboarding(screen: Bool, calendarAutoAdd: Bool) async {
+        onboardingDone = true
+        defaults.set(true, forKey: Keys.onboardingDone)
+        if screen { await setScreenObservation(true) }
+        if calendarAutoAdd { await setCalendarAutoAdd(true) }
     }
 
     // MARK: - E-mail
@@ -246,6 +325,12 @@ final class PerceptionController {
             try await center.attachConsumer(brain.engine)
         } catch { await brain.engine.report(error) }
         await brain.reload()
+        // L'agent d'agenda reçoit les mêmes événements ; son registre persistant évite tout doublon au rejeu.
+        do {
+            await calendar.agent.recoverPending()
+            try await center.attachConsumer(calendar.agent)
+        } catch { lastError = error.localizedDescription }
+        await calendar.reload()
         do {
             try await execution.engine.recover()
             try await center.attachConsumer(execution.engine)

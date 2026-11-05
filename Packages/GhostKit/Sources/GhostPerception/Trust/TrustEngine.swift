@@ -8,6 +8,10 @@ public enum Permission: String, Codable, Sendable {
     case watchFolder
     /// Envoyer des données **masquées** à un modèle externe (GHOST BRAIN). Désactivée par défaut.
     case callExternalModel
+    /// Lire le texte affiché à l'écran (en plus de l'autorisation « Enregistrement de l'écran » de macOS).
+    case observeScreen
+    /// Créer des événements dans l'agenda de l'utilisateur (jamais modifier ni supprimer ceux qu'il a créés lui-même).
+    case writeCalendar
 }
 
 /// Autorisation accordée par l'utilisateur.

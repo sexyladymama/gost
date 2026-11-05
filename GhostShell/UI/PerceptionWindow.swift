@@ -6,12 +6,13 @@ import GhostPerception
 /// et le contrôle complet des sources et des données.
 struct PerceptionWindow: View {
     enum Section: String, CaseIterable, Identifiable {
-        case missions, activity, events, memory, issues, sources, accessLog, privacy
+        case missions, agenda, activity, events, memory, issues, sources, accessLog, privacy
         var id: String { rawValue }
         var title: String {
             switch self {
             case .events: return "Événements"
             case .missions: return "Missions"
+            case .agenda: return "Agenda"
             case .activity: return "Activité"
             case .memory: return "Mémoire"
             case .issues: return "Anomalies"
@@ -24,6 +25,7 @@ struct PerceptionWindow: View {
             switch self {
             case .events: return "tray.full"
             case .missions: return "scope"
+            case .agenda: return "calendar"
             case .activity: return "play.circle"
             case .memory: return "brain"
             case .issues: return "exclamationmark.triangle"
@@ -37,6 +39,7 @@ struct PerceptionWindow: View {
     let stateManager: GhostStateManager
     let perception: PerceptionController
     @State private var section: Section? = .missions
+    @State private var showOnboarding = false
     @AppStorage(GhostAppearance.storageKey) private var appearanceRaw = GhostAppearance.dark.rawValue
 
     var body: some View {
@@ -59,6 +62,7 @@ struct PerceptionWindow: View {
             switch section ?? .missions {
             case .events: EventsView(center: perception.center)
             case .missions: MissionsView(perception: perception)
+            case .agenda: AgendaView(perception: perception)
             case .activity: AutonomyView(perception: perception)
             case .memory: ContextView(perception: perception)
             case .issues: IssuesView(center: perception.center)
@@ -86,11 +90,17 @@ struct PerceptionWindow: View {
         .scrollContentBackground(.hidden)
         .background(GhostBackdrop())
         .ghostAppearance(GhostAppearance(rawValue: appearanceRaw) ?? .dark)
+        .sheet(isPresented: $showOnboarding) { OnboardingView(perception: perception) }
+        .task {
+            showOnboarding = !perception.onboardingDone
+            await perception.calendar.reload()
+        }
     }
 
     private func badge(for item: Section) -> Int {
         switch item {
         case .missions: return perception.brain.missions.filter { [.proposed, .needsClarification].contains($0.state) }.count
+        case .agenda: return perception.calendar.entries.filter { $0.status == .suggested }.count
         case .events: return perception.center.unseenImportant.count
         case .issues: return perception.center.issues.count
         default: return 0

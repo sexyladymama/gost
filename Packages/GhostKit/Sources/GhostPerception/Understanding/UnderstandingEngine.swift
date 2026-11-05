@@ -212,14 +212,19 @@ public struct UnderstandingEngine: Sendable {
             score = max(score, 0.6) // confiance dans l'absence d'action
         }
         let confidence = min(0.99, max(0.05, score))
+        // Texte d'écran : aucun destinataire connu, du texte de toute nature (articles, pages web…) :
+        // seuil plus strict pour ne pas transformer une simple formule de politesse en mission.
+        let isScreen = obs.metadata["origin"] == "screen"
+        let threshold = isScreen ? max(missionThreshold, 0.75) : missionThreshold
         let isMission = actionable && primary != .information && !obs.isAutomated
-            && obs.userIsDirectRecipient != false && confidence >= missionThreshold
+            && obs.userIsDirectRecipient != false && confidence >= threshold
         if isMission {
             evidence.append(Evidence(rule: "mission.candidate",
-                                     explanation: "Demande adressée à l'utilisateur, confiance \(Int(confidence * 100)) % ≥ \(Int(missionThreshold * 100)) %"))
+                                     explanation: "Demande adressée à l'utilisateur, confiance \(Int(confidence * 100)) % ≥ \(Int(threshold * 100)) %"))
         }
 
-        let sender = obs.people.first { $0.role == .sender }?.displayName ?? "Expéditeur inconnu"
+        let sender = obs.people.first { $0.role == .sender }?.displayName
+            ?? (isScreen ? "Vu dans \(obs.metadata["app"] ?? "l'écran")" : "Expéditeur inconnu")
         return GhostEvent(
             fingerprint: obs.fingerprint, kind: primary, tags: tags,
             summary: Self.summary(primary, sender: sender, title: obs.title, action: expectedAction,

@@ -17,6 +17,28 @@ struct SourcesView: View {
             }
 
             Section {
+                Toggle("GHOST regarde mon écran", isOn: Binding(get: { perception.screenEnabled },
+                                                                  set: { value in Task { await perception.setScreenObservation(value) } }))
+                if perception.screenEnabled {
+                    if perception.screenPermission {
+                        Label("Autorisation macOS « Enregistrement de l'écran » accordée.", systemImage: "checkmark.shield").foregroundStyle(.green)
+                    } else {
+                        Label("macOS n'a pas encore autorisé GHOST à enregistrer l'écran : accordez-le dans Réglages Système, puis quittez et relancez GHOST.",
+                              systemImage: "exclamationmark.shield").foregroundStyle(.orange)
+                        Button("Ouvrir les réglages de confidentialité") {
+                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+                        }
+                    }
+                    TextField("Applications à ne jamais lire (séparées par des virgules)", text: $perception.excludedApps)
+                        .textFieldStyle(.roundedBorder)
+                    Text("Toujours ignorés : gestionnaires de mots de passe, sites de banque et de paiement, navigation privée, la fenêtre de GHOST, écran verrouillé. Seul le texte utile (une demande, un rendez-vous) est conservé, jamais d'image. ⌃⌥⌘G met GHOST en pause.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Écran")
+            }
+
+            Section {
                 if let status = perception.status(of: perception.gmailID) {
                     SourceStatusRow(status: status, center: perception.center)
                 }
