@@ -30,6 +30,15 @@ public final class MindCenter {
     public var searches: [PlaceSearch] { state.searches.values.filter { !$0.hidden }.sorted { $0.searchedAt > $1.searchedAt } }
     public var pending: [MailDraft] { drafts.filter { [.ready, .needsModel, .failed].contains($0.status) } }
 
+    /// Où GHOST a traité cette mission (« Brouillons », « Recherches », « Créations »), ou nil si elle n'a pas été prise en charge.
+    public func handledIn(_ missionID: String) -> String? {
+        guard let id = state.handled[missionID] else { return nil }
+        if state.drafts[id] != nil { return "Brouillons" }
+        if state.searches[id] != nil { return "Recherches" }
+        if state.creations[id] != nil { return "Créations" }
+        return nil
+    }
+
     public func reload() async {
         do { state = try await engine.snapshot() } catch { self.error = error.localizedDescription }
         let status = await engine.modelStatus()

@@ -25,7 +25,9 @@ public struct PrivacyPolicy: Sendable {
             "com.apple.Passwords", "com.apple.loginwindow", "com.apple.ScreenSaver.Engine", "com.apple.screensaver",
             "com.apple.systempreferences", "com.apple.SecurityAgent", "app.ghost.shell"
         ]
-        excludedAppNames = ["1password", "bitwarden", "dashlane", "lastpass", "keepass", "keychain", "mots de passe", "passwords"]
+        excludedAppNames = ["1password", "bitwarden", "dashlane", "lastpass", "keepass", "keychain", "mots de passe", "passwords",
+                            // Assistants IA : leurs réponses s'adressent à l'utilisateur (« envoie-moi une capture… ») sans être des demandes à traiter.
+                            "claude", "codex", "chatgpt"]
         self.extraExcludedApps = extraExcludedApps
         privateWindowMarkers = ["navigation privée", "private browsing", "incognito", "fenêtre privée", "private window", "inprivate"]
         sensitiveWindowMarkers = [

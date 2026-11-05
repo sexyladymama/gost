@@ -87,7 +87,7 @@ struct MissionsView: View {
                                    description: Text("GHOST crée une mission seulement lorsqu'une demande claire le justifie — et sait ne rien faire."))
         } else {
             List(selection: $selection) {
-                ForEach(visible) { MissionRow(mission: $0).tag($0.id) }
+                ForEach(visible) { MissionRow(mission: $0, handledIn: perception.mind.handledIn($0.id)).tag($0.id) }
                 if filter == .open && !center.watches.isEmpty {
                     Section("À surveiller (pas encore une mission)") {
                         ForEach(center.watches) { watch in
@@ -116,6 +116,7 @@ struct MissionsView: View {
 
 struct MissionRow: View {
     let mission: Mission
+    var handledIn: String?
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Circle().fill(mission.effectivePriority.color).frame(width: 9, height: 9).padding(.top, 5)
@@ -123,7 +124,8 @@ struct MissionRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(mission.title).lineLimit(2)
                 HStack(spacing: 6) {
-                    Text(mission.state.label).foregroundStyle(mission.state.color)
+                    if let handledIn { Text("Pris en charge par GHOST · \(handledIn)").foregroundStyle(.green) }
+                    else { Text(mission.state.label).foregroundStyle(mission.state.color) }
                     if let d = mission.deadline { Label(d.formatted(date: .abbreviated, time: .shortened), systemImage: "clock") }
                     else if mission.deadlineConflict { Label("échéance contradictoire", systemImage: "exclamationmark.triangle") }
                     if mission.isSimulated { Text("· simulation") }
@@ -156,6 +158,11 @@ struct MissionDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                if let place = perception.mind.handledIn(mission.id) {
+                    Label("GHOST s'en est occupé : voir « \(place) ». Les étapes ci-dessous sont le plan générique du Brain ; elles ne bloquent pas ce travail.", systemImage: "checkmark.circle")
+                        .font(.callout).foregroundStyle(.green)
+                        .padding(10).frame(maxWidth: .infinity, alignment: .leading).ghostGlass(cornerRadius: 12)
+                }
                 honesty
                 if mission.isOpen { actions }
                 whyCreated

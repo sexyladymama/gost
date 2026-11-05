@@ -5,6 +5,13 @@ import GhostPerception
 final class PrivacyFilterTests: XCTestCase {
     let policy = PrivacyPolicy()
 
+    func testAIAssistantsAreNotReadBecauseTheirAnswersAddressTheUser() {
+        for app in ["Claude", "Codex", "ChatGPT"] {
+            XCTAssertEqual(policy.decide(ScreenContext(app: app)), .skip("application exclue"), app)
+        }
+        XCTAssertEqual(policy.decide(ScreenContext(app: "Messages")), .allow)
+    }
+
     func testPasswordManagersBanksAndPrivateWindowsAreSkippedBeforeAnyReading() {
         XCTAssertEqual(policy.decide(ScreenContext(app: "1Password", bundleID: "com.1password.1password")), .skip("application exclue"))
         XCTAssertEqual(policy.decide(ScreenContext(app: "Trousseau d'accès", bundleID: "com.apple.keychainaccess")), .skip("application exclue"))
