@@ -22,22 +22,38 @@ public struct MapKitPlaceSearcher: PlaceSearcher {
         guard let center = try await MKLocalSearch(request: locate).start().mapItems.first?.placemark.coordinate else {
             throw MindError.invalid("Zone introuvable : « \(area) ».")
         }
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = query
-        request.region = MKCoordinateRegion(center: center, latitudinalMeters: radiusMeters * 2, longitudinalMeters: radiusMeters * 2)
         let origin = CLLocation(latitude: center.latitude, longitude: center.longitude)
-        let items = try await MKLocalSearch(request: request).start().mapItems
-        return items.prefix(maxResults * 2).compactMap { item -> PlaceResult? in
-            guard let name = item.name, !name.isEmpty else { return nil }
-            let c = item.placemark.coordinate
-            let distance = origin.distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude))
-            guard distance <= radiusMeters * 2.5 else { return nil }
-            return PlaceResult(id: "\(name)|\(c.latitude)|\(c.longitude)", name: name, address: item.placemark.title ?? "",
-                               phone: item.phoneNumber, url: item.url?.absoluteString, latitude: c.latitude, longitude: c.longitude,
-                               distanceMeters: distance)
+        let region = MKCoordinateRegion(center: center, latitudinalMeters: radiusMeters * 2, longitudinalMeters: radiusMeters * 2)
+        var found: [PlaceResult] = [], seen = Set<String>()
+        // Apple Plans comprend mal certaines formulations (« club de boxe » → 1 résultat, « boxe » → 23) : on essaie des variantes
+        // et on garde d'abord ce que la formulation exacte a trouvé.
+        for variant in Self.variants(of: query) {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = variant
+            request.region = region
+            guard let items = try? await MKLocalSearch(request: request).start().mapItems else { continue }
+            let batch = items.prefix(maxResults * 2).compactMap { item -> PlaceResult? in
+                guard let name = item.name, !name.isEmpty, seen.insert(name.lowercased()).inserted else { return nil }
+                let c = item.placemark.coordinate
+                let distance = origin.distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude))
+                guard distance <= radiusMeters * 2.5 else { return nil }
+                return PlaceResult(id: "\(name)|\(c.latitude)|\(c.longitude)", name: name, address: item.placemark.title ?? "",
+                                   phone: item.phoneNumber, url: item.url?.absoluteString, latitude: c.latitude, longitude: c.longitude,
+                                   distanceMeters: distance)
+            }
+            found += batch.sorted { ($0.distanceMeters ?? .infinity) < ($1.distanceMeters ?? .infinity) }
+            if found.count >= maxResults { break }
         }
-        .sorted { ($0.distanceMeters ?? .infinity) < ($1.distanceMeters ?? .infinity) }
-        .prefix(maxResults).map { $0 }
+        return Array(found.prefix(maxResults))
+    }
+
+    /// La question telle quelle, puis son cœur (« club de boxe » → « boxe »), puis « salle de … ».
+    static func variants(of query: String) -> [String] {
+        let core = query.replacingOccurrences(of: #"(?i)^(?:un |une |des |les |le |la |l')?(?:club|salle|cours|école|ecole)\s+(?:de |d')?"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        var out = [query]
+        for v in [core, "salle de \(core)"] where !v.isEmpty && !out.contains(where: { $0.caseInsensitiveCompare(v) == .orderedSame }) { out.append(v) }
+        return out
     }
 }
 #endif

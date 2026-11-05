@@ -79,7 +79,14 @@ public enum TextBlocks {
             blocks.append([line])
         }
         return blocks.compactMap { group in
-            let text = group.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: "\n")
+            // Une phrase qui passe à la ligne (bulle de message, paragraphe) reste UNE phrase : on ne sépare par un saut de ligne
+            // qu'après une ponctuation finale.
+            var text = ""
+            for line in group.map({ $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }) {
+                if text.isEmpty { text = line; continue }
+                text += (text.last.map { ".!?:;".contains($0) } ?? false) ? "\n" : " "
+                text += line
+            }
             guard text.count >= 12 else { return nil }
             return TextBlock(text: String(text.prefix(maxBlockLength)), lineCount: group.count)
         }
