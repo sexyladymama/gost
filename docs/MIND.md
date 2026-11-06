@@ -26,8 +26,8 @@ GHOST ne se contente plus de repérer une demande : il **la comprend et fait le 
 `LanguageModel` est une interface ; GHOST essaie dans l'ordre :
 
 1. **Apple Intelligence (modèle intégré à macOS 26, `FoundationModels`)** — tourne **sur le Mac**, sans clé, sans réseau.
-2. **Modèle externe** (Anthropic, avec votre clé et votre consentement) — seulement s'il est activé ; **noms, prénoms et adresses sont remplacés
-   par des jetons avant l'envoi puis restaurés localement** (`ReversibleMask`).
+2. **Modèle externe** (Anthropic, avec votre clé et votre consentement) — seulement s'il est activé ; **noms et prénoms connus, ainsi que les adresses e-mail reconnues, sont remplacés
+   par des jetons avant l'envoi puis restaurés localement** (`ReversibleMask`). Ce masquage ne garantit pas une anonymisation complète.
 
 > **État sur ce Mac (vérifié le 5 novembre 2026)** : le modèle d'Apple est **désactivé** (`appleIntelligenceNotEnabled`).
 > Tant qu'il ne l'est pas, GHOST ne peut ni rédiger ni dessiner. À activer dans **Réglages Système ▸ Apple Intelligence et Siri**
@@ -65,7 +65,7 @@ Les messages courants (« écris… », « trouve… », « regarde… », « cr
 
 ## Tests
 
-`swift test --package-path Packages/GhostKit --filter GhostMindTests` (39 tests) : compréhension de vos exemples, masquage réversible, validation du modèle,
+`swift test --package-path Packages/GhostKit --filter GhostMindTests` : compréhension de vos exemples, masquage réversible, validation du modèle,
 brouillons (modèle indisponible, externe masqué, réponse invalide, repli), envoi (clic obligatoire, une seule fois, échec, interruption, fichier corrompu
 préservé), recherche (zone, « chez nous », autorisation, échec, doublon), création (logo validé et rendu, document RTF, sans modèle, sans dossier, SVG dangereux,
 masquage), et un **bout en bout** : une demande lue à l'écran (vrai OCR) → Perception → Contexte → Brain → brouillon prêt, sans envoi automatique.
@@ -82,3 +82,7 @@ masquage), et un **bout en bout** : une demande lue à l'écran (vrai OCR) → P
 - **Images** autres que des logos vectoriels : non implémentées (génération d'images par un service externe, ou Image Playground).
 - WhatsApp, Messages : GHOST rédige le texte mais ne sait envoyer que par Mail.
 - Réservations, achats, publications : jamais, sans validation explicite (niveau 3).
+
+## Audit du 6 novembre 2026
+
+Pause/arrêt, révocation, suppression et corrections utilisateur invalident les générations en cours. Une seule génération est admise par mission ; la fin d'un envoi fusionne son résultat avec les autres brouillons actuels. La reprise de GHOST rejoue les demandes autorisées non traitées. Un envoi déjà engagé reste irrévocable. Les dossiers échangés sont refusés, les SVG actifs ou chargeant des ressources CSS externes également. Voir [le rapport et les limites de reprise après panne](AUDIT_2026_11_06.md).

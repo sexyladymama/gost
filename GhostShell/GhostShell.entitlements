@@ -6,8 +6,8 @@
 	     de GHOST PERCEPTION (Mission 002) : -->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
-	<!-- Connexions sortantes uniquement (API Gmail et OAuth Google).
-	     Le moteur bloque en plus toute autre destination (GuardedHTTPClient). -->
+	<!-- Connexions sortantes : Gmail/OAuth, modèle externe autorisé, recherches
+	     Apple Plans et DuckDuckGo. Chaque module contrôle son consentement. -->
 	<key>com.apple.security.network.client</key>
 	<true/>
 	<!-- Mission 005 : les dossiers de sortie choisis autorisent la création. Les sources de perception gardent leurs signets en lecture seule ; le moteur d'exécution applique ses propres autorisations. -->
@@ -26,7 +26,7 @@
 	</array>
 	<key>com.apple.security.files.bookmarks.app-scope</key>
 	<true/>
-	<!-- Aucune autre autorisation : pas de caméra, micro, contacts,
-	     calendrier, enregistrement d'écran, ni accès complet au disque. -->
+	<!-- Aucun accès caméra, micro, contacts ni accès complet au disque.
+	     ScreenCaptureKit exige séparément le consentement macOS à la capture. -->
 </dict>
 </plist>

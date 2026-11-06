@@ -146,7 +146,7 @@ l'empreinte de la mission et le retour d'état ci-dessus.
 
 ## Tests
 
-`swift test --package-path Packages/GhostKit --filter GhostAutonomyTests` (16 tests) :
+`swift test --package-path Packages/GhostKit --filter GhostAutonomyTests` :
 
 | Exigence | Test |
 |---|---|
@@ -180,3 +180,7 @@ Manuelles restantes (non réalisées dans cette session) : ouvrir le `.xlsx` dan
 - La remise du livrable au demandeur et la validation de l'utilisateur restent des étapes du plan du Brain, non exécutées.
 - L'exécution est bornée en mémoire (20 Mo, 100 fichiers, 5 000 lignes) ; `executions.json` est réécrit en entier à chaque checkpoint.
 - Les compteurs et checkpoints sont locaux, sans chiffrement applicatif ajouté.
+
+## Audit du 6 novembre 2026
+
+La préparation d'une exécution est maintenant atomique dans le store : des demandes simultanées pour une même mission partagent le même identifiant. Une déclaration sensible est conservée même si l'exécution existe déjà. Un échec peut être annulé afin de préparer une nouvelle exécution. Des régressions supplémentaires vérifient ces cas et l'altération réelle de la sortie avant vérification. Voir [le rapport](AUDIT_2026_11_06.md).

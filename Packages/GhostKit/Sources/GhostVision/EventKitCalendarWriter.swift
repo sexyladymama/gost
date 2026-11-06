@@ -19,7 +19,7 @@ public final class EventKitCalendarWriter: CalendarWriter, @unchecked Sendable {
     public func events(around start: Date, window: TimeInterval) async throws -> [ExistingEvent] {
         let predicate = store.predicateForEvents(withStart: start.addingTimeInterval(-window), end: start.addingTimeInterval(window), calendars: nil)
         return store.events(matching: predicate).map {
-            ExistingEvent(identifier: $0.eventIdentifier ?? "", title: $0.title ?? "", start: $0.startDate, end: $0.endDate)
+            ExistingEvent(identifier: $0.eventIdentifier ?? "", title: $0.title ?? "", start: $0.startDate, end: $0.endDate, notes: $0.notes)
         }
     }
 
@@ -36,7 +36,7 @@ public final class EventKitCalendarWriter: CalendarWriter, @unchecked Sendable {
 
     public func fetch(_ identifier: String) async throws -> ExistingEvent? {
         guard let event = store.event(withIdentifier: identifier) else { return nil }
-        return ExistingEvent(identifier: identifier, title: event.title ?? "", start: event.startDate, end: event.endDate)
+        return ExistingEvent(identifier: identifier, title: event.title ?? "", start: event.startDate, end: event.endDate, notes: event.notes)
     }
 
     public func delete(_ identifier: String) async throws {

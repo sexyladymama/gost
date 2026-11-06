@@ -4,7 +4,7 @@ import GhostPerception
 
 public enum ExecutionState: String, Codable, CaseIterable, Sendable {
     case pending, authorized, running, waitingForApproval = "waiting_for_approval", paused, verifying, completed, failed, cancelled
-    public var isTerminal: Bool { [.completed, .failed, .cancelled].contains(self) }
+    public var isTerminal: Bool { [.completed, .cancelled].contains(self) }
     public func canMove(to next: Self) -> Bool {
         if self == next { return true }
         switch self {

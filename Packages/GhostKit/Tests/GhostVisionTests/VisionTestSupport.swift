@@ -61,6 +61,9 @@ actor FakeCalendar: CalendarWriter {
     var failAfterCreate = false
     var corruptFetch = false
     private var counter = 0
+    private var eventsHook: (@Sendable () async -> Void)?
+    func setEventsHook(_ hook: (@Sendable () async -> Void)?) { eventsHook = hook }
+    func removeMarker(_ identifier: String) { store[identifier]?.notes = nil }
     func setAccess(_ value: CalendarAuthorization) { access = value }
     func setFailAfterCreate(_ value: Bool) { failAfterCreate = value }
     func setCorruptFetch(_ value: Bool) { corruptFetch = value }
@@ -71,11 +74,12 @@ actor FakeCalendar: CalendarWriter {
     func authorization() async -> CalendarAuthorization { access }
     func requestAccess() async -> Bool { access == .authorized }
     func events(around start: Date, window: TimeInterval) async throws -> [ExistingEvent] {
-        store.values.filter { abs($0.start.timeIntervalSince(start)) <= window }
+        if let hook = eventsHook { await hook() }
+        return store.values.filter { abs($0.start.timeIntervalSince(start)) <= window }
     }
     func create(_ request: CalendarEventRequest) async throws -> String {
         counter += 1; let id = "ev-\(counter)"
-        store[id] = ExistingEvent(identifier: id, title: request.title, start: request.start, end: request.end)
+        store[id] = ExistingEvent(identifier: id, title: request.title, start: request.start, end: request.end, notes: request.notes)
         createdNotes[id] = request.notes
         if failAfterCreate { throw CalendarError.storage("panne après création") }
         return id

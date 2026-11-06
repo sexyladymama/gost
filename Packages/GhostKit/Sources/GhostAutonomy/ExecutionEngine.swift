@@ -60,8 +60,6 @@ public actor ExecutionEngine: PerceptionEventConsumer {
             throw ExecutionError.approval("Une mission Excel confirmée, prête et sans ambiguïté est nécessaire. Les autres missions restent au Brain.")
         }
         let binding = try ExecutionIdentity.binding(mission)
-        let archive = try await store.snapshot()
-        if let existing = archive.executions.values.first(where: { $0.mission.id == missionID && $0.binding == binding && $0.state != .cancelled }) { return existing.id }
         let id = UUID().uuidString.lowercased()
         let ids: [ToolID] = [.listAuthorizedFiles, .readAuthorizedFile, .createSpreadsheet, .saveArtifact, .verifyArtifact, .notifyUser]
         var steps: [ExecutionOperation] = []
@@ -74,8 +72,20 @@ public actor ExecutionEngine: PerceptionEventConsumer {
         context.capability = capability
         context.declaredSensitive = declaredSensitive
         context.history.append(ExecutionLog(message: "Plan local dérivé du Brain : lecture CSV/TSV, création XLSX, vérification, notification. Validation et remise externe du plan initial restent hors périmètre."))
-        try await store.commit { $0.executions[id] = context }
-        await publish(); return id
+        let preparedID = try await store.commit { archive in
+            if var existing = archive.executions.values.first(where: { $0.mission.id == missionID && $0.binding == binding && $0.state != .cancelled }) {
+                if declaredSensitive && !existing.declaredSensitive {
+                    guard [.pending, .paused, .waitingForApproval, .failed].contains(existing.state) else {
+                        throw ExecutionError.approval("Mettez l'exécution en pause avant de déclarer ses données sensibles.")
+                    }
+                    existing.declaredSensitive = true; archive.executions[existing.id] = existing
+                }
+                return existing.id
+            }
+            archive.executions[id] = context
+            return id
+        }
+        await publish(); return preparedID
     }
     public func authorize(_ id: String, input: URL, output: URL, allowReadContents: Bool, allowCreate: Bool) async throws {
         let context = try await context(id)
@@ -119,7 +129,7 @@ public actor ExecutionEngine: PerceptionEventConsumer {
     public func setGlobalPaused(_ paused: Bool) async {
         globallyPaused = paused
         if paused, let archive = try? await store.snapshot() {
-            for c in archive.executions.values where !c.state.isTerminal && c.state != .pending && c.state != .waitingForApproval {
+            for c in archive.executions.values where !c.state.isTerminal && c.state != .pending && c.state != .waitingForApproval && c.state != .failed {
                 do { try await pause(c.id) } catch { report(error) }
             }
         }

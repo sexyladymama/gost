@@ -92,7 +92,7 @@ swift test --package-path Packages/GhostKit
 
 ou, dans Xcode, `Product ▸ Test` (⌘U) avec le schéma **GhostShell**.
 
-Les tests (249) couvrent la logique d'état de la Mission 001 et les exigences
+Les tests couvrent la logique d'état de la Mission 001 et les exigences
 de la Mission 002 (préfixes `testR01_` à `testR10_`) :
 
 | # | Exigence | Tests |
@@ -124,11 +124,11 @@ gost/
 ├── GhostShell/                       Couche interface (SwiftUI / AppKit)
 │   ├── GhostApp.swift                Point d'entrée (@main)
 │   ├── GhostAppDelegate.swift        Cycle de vie : démarrage, restauration des sources, arrêt
-│   ├── GhostShell.entitlements       Bac à sable : réseau sortant, dossier choisi en lecture seule
+│   ├── GhostShell.entitlements       Bac à sable : réseau, dossiers choisis, agenda, automatisation Mail
 │   ├── Perception/
 │   │   ├── PerceptionController.swift   Actions utilisateur sur les sources
 │   │   ├── GmailAuthorizer.swift        Fenêtre d'authentification Google
-│   │   └── SecurityScopedFolder.swift   Signet de dossier en lecture seule
+│   │   └── SecurityScopedFolder.swift   Signets de dossiers (sources en lecture seule, sorties en écriture)
 │   └── UI/                           Barre de menus, tableau de bord, fenêtre Perception
 ├── Packages/GhostKit/                Logique, sans aucune dépendance à l'UI
 │   ├── Sources/GhostKit/             États de GHOST, GhostCoreInterface (Mission 001)
@@ -165,10 +165,11 @@ Flux : sources autorisées → `PerceptionEngine` → `EventNormalizer` →
 
 ## Confidentialité
 
-- Aucune source n'est lue sans action explicite de votre part ; chaque accès est journalisé.
-- Aucune capture d'écran, aucune frappe clavier, aucune observation d'applications.
-- E-mail en lecture seule (`gmail.readonly`) ; dossier : métadonnées uniquement.
-- Seuls `gmail.googleapis.com` et `oauth2.googleapis.com` sont joignables, et
-  seulement pour la source Gmail ; toute autre destination est bloquée.
-- Jetons dans le Trousseau macOS ; données dans le conteneur de l'application,
-  séparées par utilisateur ; suppression en un clic.
+- Gmail et les métadonnées du dossier surveillé sont lus après autorisation ; le contenu CSV/TSV et le dossier de sortie d'une exécution Excel nécessitent des autorisations séparées.
+- La lecture de l'écran exige votre consentement et l'autorisation macOS. L'OCR reste local ; les images sont abandonnées, les extraits utiles sont conservés. Le filtre exclut les fenêtres sensibles connues ; il ne garantit pas de reconnaître tout contenu privé.
+- Le modèle Apple reste sur le Mac. Le modèle externe (Anthropic), Apple Plans et DuckDuckGo exigent leurs autorisations respectives. Les noms connus et les adresses e-mail sont masqués avant l'envoi au modèle externe ; cela ne constitue pas une anonymisation complète du texte.
+- Un mail ne part que sur le clic **Envoyer**. L'ajout automatique de rendez-vous dépend du consentement agenda. Un envoi ou un ajout déjà engagé peut finir après la demande de pause.
+- Les créations utilisent le dossier choisi, sans écrasement ; les dossiers échangés et les liens à leur place sont refusés. Les jetons restent dans le Trousseau ; la mémoire locale n'a pas de chiffrement applicatif supplémentaire.
+- Supprimer les données de GHOST efface ses registres et sa mémoire. Les fichiers produits et les rendez-vous déjà ajoutés restent dans vos applications ; les autorisations peuvent être révoquées dans Sources.
+
+L'[audit du 6 novembre 2026](docs/AUDIT_2026_11_06.md) détaille les corrections et les vérifications réellement effectuées.

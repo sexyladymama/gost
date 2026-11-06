@@ -216,8 +216,9 @@ final class PerceptionController {
 
     private func registerScreenSource() async {
         let extras = Set(excludedApps.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
-        let source = ScreenSource(frames: ScreenCaptureKitFrameSource(diagnostics: screenDiagnostics), recognizer: VisionTextRecognizer(),
-                                  policy: PrivacyPolicy(extraExcludedApps: extras), trust: system.trust, diagnostics: screenDiagnostics)
+        let policy = PrivacyPolicy(extraExcludedApps: extras)
+        let source = ScreenSource(frames: ScreenCaptureKitFrameSource(diagnostics: screenDiagnostics, policy: policy), recognizer: VisionTextRecognizer(),
+                                  policy: policy, trust: system.trust, diagnostics: screenDiagnostics)
         await center.register(source)
     }
 
@@ -446,9 +447,18 @@ final class PerceptionController {
     func makeCore() -> GhostCoreInterface {
         BrainAwareCore(base: center, onActive: { [weak self] active in
             guard let self else { return }
+            await self.mind.engine.setAutonomous(active)
+            await self.calendar.agent.setActive(active)
             await self.brain.engine.setActive(active)
             await self.execution.engine.setGlobalPaused(!active)
-            if active { Task { await self.catchUpBrain() } }
+            if active {
+                Task {
+                    await self.catchUpBrain()
+                    do { try await self.center.replayEvents(to: self.mind.engine) }
+                    catch { self.lastError = error.localizedDescription }
+                    await self.mind.reload()
+                }
+            }
         })
     }
 

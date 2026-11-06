@@ -8,8 +8,9 @@ public struct ExistingEvent: Sendable, Hashable {
     public var title: String
     public var start: Date
     public var end: Date
-    public init(identifier: String, title: String, start: Date, end: Date) {
-        self.identifier = identifier; self.title = title; self.start = start; self.end = end
+    public var notes: String?
+    public init(identifier: String, title: String, start: Date, end: Date, notes: String? = nil) {
+        self.identifier = identifier; self.title = title; self.start = start; self.end = end; self.notes = notes
     }
 }
 
@@ -54,6 +55,8 @@ public struct CalendarEntry: Codable, Identifiable, Hashable, Sendable {
     public var sourceApp: String
     public var status: CalendarEntryStatus
     public var eventIdentifier: String?
+    /// Preuve de provenance enregistrée avant création ; absente des anciens registres.
+    public var ownershipToken: String?
     public var reason: String?
     public var confidence: Double
     public var hasExplicitTime: Bool
@@ -95,6 +98,19 @@ public actor CalendarAgent: PerceptionEventConsumer {
     private let calendar: Calendar
     private let clock: @Sendable () -> Date
     private var ledger: CalendarLedger?
+    private var active = true
+    private var generation: UInt64 = 0
+    private var adding: Set<String> = []
+    public func setActive(_ value: Bool) { active = value; if !value { generation &+= 1 } }
+    private func check(_ token: UInt64) throws {
+        try Task.checkCancellation()
+        guard active, token == generation else { throw CancellationError() }
+    }
+    private static func marker(_ entry: CalendarEntry) -> String? { entry.ownershipToken.map { "[GHOST-ACTION:\($0)]" } }
+    private static func owns(_ event: ExistingEvent, entry: CalendarEntry) -> Bool {
+        guard let marker = marker(entry) else { return false }
+        return event.notes?.components(separatedBy: .newlines).contains(marker) == true
+    }
 
     public init(writer: CalendarWriter, trust: TrustEngine, ledgerURL: URL?, calendar: Calendar = .current,
                 clock: @escaping @Sendable () -> Date = { Date() }) {
@@ -110,6 +126,7 @@ public actor CalendarAgent: PerceptionEventConsumer {
     // MARK: Perception
 
     public func consume(_ events: [GhostEvent]) async {
+        guard active else { return }
         for event in events where event.source.kind == .screen && event.metadata["appt.start"] != nil {
             do { try await handle(event) } catch { report(error) }
         }
@@ -117,6 +134,8 @@ public actor CalendarAgent: PerceptionEventConsumer {
     }
 
     private func handle(_ event: GhostEvent) async throws {
+        guard active else { return }
+        let token = generation
         let m = event.metadata
         guard let title = m["appt.title"], let startValue = m["appt.start"].flatMap(Double.init), let endValue = m["appt.end"].flatMap(Double.init) else { return }
         let start = Date(timeIntervalSince1970: startValue), end = Date(timeIntervalSince1970: endValue)
@@ -126,7 +145,7 @@ public actor CalendarAgent: PerceptionEventConsumer {
         var ledger = try load()
         if let existing = ledger.entries[key], existing.status != .failed { return }                                           // déjà traité : jamais de doublon
         let entry = CalendarEntry(id: key, title: title, start: start, end: end, location: m["appt.location"],
-                                  excerpt: m["appt.excerpt"] ?? "", sourceApp: m["app"] ?? "écran", status: .suggested, eventIdentifier: nil,
+                                  excerpt: m["appt.excerpt"] ?? "", sourceApp: m["app"] ?? "écran", status: .suggested, eventIdentifier: nil, ownershipToken: ledger.entries[key]?.ownershipToken ?? UUID().uuidString,
                                   reason: nil, confidence: Double(m["appt.confidence"] ?? "") ?? 0.5,
                                   hasExplicitTime: m["appt.explicitTime"] == "1", createdAt: now, updatedAt: now)
         ledger.entries[key] = entry
@@ -135,6 +154,7 @@ public actor CalendarAgent: PerceptionEventConsumer {
         let certain = m["appt.certain"] == "1"
         let granted = await trust.isAuthorized(Self.sourceID, .writeCalendar)
         let access = await writer.authorization()
+        try check(token)
         if certain, granted, access == .authorized {
             try await add(key)
         } else {
@@ -146,24 +166,44 @@ public actor CalendarAgent: PerceptionEventConsumer {
 
     // MARK: Écriture vérifiée
 
-    private func add(_ key: String) async throws {
+    private func add(_ key: String, explicitlyApproved: Bool = false) async throws {
+        let token = generation
+        try check(token)
+        guard adding.insert(key).inserted else { return }
+        defer { adding.remove(key) }
         guard let entry = try load().entries[key] else { throw CalendarError.unknownEntry }
         // Un événement équivalent existe déjà dans l'agenda : rien n'est ajouté.
         let nearby = try await writer.events(around: entry.start, window: 2 * 3600)
+        try check(token)
+        if let own = nearby.first(where: { Self.owns($0, entry: entry) && $0.title == entry.title && abs($0.start.timeIntervalSince(entry.start)) < 1 && abs($0.end.timeIntervalSince(entry.end)) < 1 }) {
+            try update(key) { $0.status = .added; $0.eventIdentifier = own.identifier; $0.reason = "ajout GHOST retrouvé, sans nouvelle création" }
+            return
+        }
         if nearby.contains(where: { abs($0.start.timeIntervalSince(entry.start)) < 1800 && Self.similar($0.title, entry.title) }) {
             try update(key) { $0.status = .alreadyPresent; $0.reason = "un événement équivalent existe déjà dans l'agenda" }
             return
         }
+        let granted = await trust.isAuthorized(Self.sourceID, .writeCalendar)
+        guard explicitlyApproved || granted else {
+            throw CalendarError.notPermitted("L'autorisation d'ajout automatique a été révoquée.")
+        }
+        guard await writer.authorization() == .authorized else { throw CalendarError.notPermitted("Accès à l'agenda non accordé.") }
+        try check(token)
+        guard try load().entries[key] != nil else { throw CalendarError.unknownEntry }
         try update(key) { $0.status = .pending }                       // intention journalisée AVANT l'écriture
         let request = CalendarEventRequest(
             title: entry.title, start: entry.start, end: entry.end, location: entry.location,
-            notes: "Ajouté par GHOST d'après un message vu dans \(entry.sourceApp) : « \(entry.excerpt) ». Vous pouvez annuler cet ajout depuis GHOST ▸ Agenda.")
+            notes: "Ajouté par GHOST d'après un message vu dans \(entry.sourceApp) : « \(entry.excerpt) ». Vous pouvez annuler cet ajout depuis GHOST ▸ Agenda.\n" + (Self.marker(entry) ?? ""))
         do {
             let identifier = try await writer.create(request)
             guard let stored = try await writer.fetch(identifier), stored.title == entry.title,
-                  abs(stored.start.timeIntervalSince(entry.start)) < 1 else {
-                try? await writer.delete(identifier)                   // vérification échouée : on retire ce qu'on vient de créer
-                try update(key) { $0.status = .failed; $0.reason = "l'événement relu ne correspond pas : ajout retiré" }
+                  abs(stored.start.timeIntervalSince(entry.start)) < 1, abs(stored.end.timeIntervalSince(entry.end)) < 1,
+                  Self.owns(stored, entry: entry) else {
+                var removed = false
+                if let stored = try? await writer.fetch(identifier), Self.owns(stored, entry: entry) {
+                    try await writer.delete(identifier); removed = true
+                }
+                try update(key) { $0.status = .failed; $0.reason = removed ? "l'événement relu ne correspond pas : ajout retiré" : "événement non conforme : provenance à vérifier manuellement dans l'agenda" }
                 throw CalendarError.verificationFailed("Vérification de l'ajout à l'agenda échouée.")
             }
             try update(key) { $0.status = .added; $0.eventIdentifier = identifier; $0.reason = nil }
@@ -177,14 +217,17 @@ public actor CalendarAgent: PerceptionEventConsumer {
 
     /// Après une panne : une écriture « en cours » est vérifiée dans l'agenda avant toute nouvelle tentative (jamais de doublon).
     public func recoverPending() async {
+        guard active, await writer.authorization() == .authorized else { return }
+        let token = generation
         guard let pending = try? load().entries.values.filter({ $0.status == .pending }) else { return }
         for entry in pending {
             do {
                 let nearby = try await writer.events(around: entry.start, window: 2 * 3600)
-                if let found = nearby.first(where: { abs($0.start.timeIntervalSince(entry.start)) < 1 && $0.title == entry.title }) {
+                try check(token)
+                if let found = nearby.first(where: { Self.owns($0, entry: entry) && abs($0.start.timeIntervalSince(entry.start)) < 1 && abs($0.end.timeIntervalSince(entry.end)) < 1 && $0.title == entry.title }) {
                     try update(entry.id) { $0.status = .added; $0.eventIdentifier = found.identifier }
                 } else {
-                    try await add(entry.id)
+                    try update(entry.id) { $0.status = .suggested; $0.reason = "Ajout interrompu : vérifiez l'agenda puis confirmez pour réessayer." }
                 }
             } catch { report(error) }
         }
@@ -195,14 +238,21 @@ public actor CalendarAgent: PerceptionEventConsumer {
 
     /// L'utilisateur accepte une suggestion (éventuellement en précisant l'heure). Exige seulement l'accès macOS à l'agenda.
     public func accept(_ id: String, start override: Date? = nil) async throws {
-        guard var entry = try load().entries[id], [.suggested, .failed, .dismissed].contains(entry.status) else { throw CalendarError.unknownEntry }
+        let token = generation
+        try check(token)
+        guard let original = try load().entries[id], [.suggested, .failed, .dismissed].contains(original.status) else { throw CalendarError.unknownEntry }
         guard await writer.authorization() == .authorized else { throw CalendarError.notPermitted("Autorisez l'accès à l'agenda dans Réglages Système.") }
+        try check(token)
+        // Relire après l'attente : ne jamais réinsérer une suggestion supprimée entre-temps.
+        guard var entry = try load().entries[id], [.suggested, .failed, .dismissed].contains(entry.status) else { throw CalendarError.unknownEntry }
         if let override {
             let duration = entry.end.timeIntervalSince(entry.start)
             entry.start = override; entry.end = override.addingTimeInterval(duration); entry.hasExplicitTime = true
-            var ledger = try load(); ledger.entries[id] = entry; try save(ledger)
         }
-        try await add(id)
+        // Migration prudente des anciennes suggestions : provenance réservée AVANT leur nouvel ajout.
+        if entry.ownershipToken == nil { entry.ownershipToken = UUID().uuidString }
+        var ledger = try load(); ledger.entries[id] = entry; try save(ledger)
+        try await add(id, explicitlyApproved: true)
         publish()
     }
 
@@ -215,7 +265,10 @@ public actor CalendarAgent: PerceptionEventConsumer {
     public func undo(_ id: String) async throws {
         guard let entry = try load().entries[id], entry.status == .added, let identifier = entry.eventIdentifier else { throw CalendarError.unknownEntry }
         guard await writer.authorization() == .authorized else { throw CalendarError.notPermitted("Autorisez l'accès à l'agenda dans Réglages Système.") }
-        if try await writer.fetch(identifier) != nil { try await writer.delete(identifier) }
+        if let event = try await writer.fetch(identifier) {
+            guard Self.owns(event, entry: entry) else { throw CalendarError.notPermitted("La provenance GHOST de cet événement ne peut pas être vérifiée ; supprimez-le manuellement si nécessaire.") }
+            try await writer.delete(identifier)
+        }
         try update(id) { $0.status = .undone; $0.reason = "ajout annulé par l'utilisateur" }
         publish()
     }
@@ -223,7 +276,7 @@ public actor CalendarAgent: PerceptionEventConsumer {
     // MARK: Données
 
     public func deleteMemory() async throws {
-        ledger = CalendarLedger()
+        generation &+= 1
         try save(CalendarLedger())
         publish()
     }

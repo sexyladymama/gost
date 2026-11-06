@@ -83,18 +83,31 @@ public struct ReversibleMask: Sendable {
 
     public static func mask(_ text: String, names: [String], emails: [String]) -> (String, ReversibleMask) {
         var mask = ReversibleMask(), out = text
-        var i = 0
-        for email in emails.sorted(by: { $0.count > $1.count }) where !email.isEmpty {
-            i += 1; let token = "ADRESSE_\(i)"; mask.mapping[token] = email
-            out = out.replacingOccurrences(of: email, with: token, options: .caseInsensitive)
-        }
-        for name in names.sorted(by: { $0.count > $1.count }) where name.count > 1 {
-            i += 1; let token = "PERSONNE_\(i)"; mask.mapping[token] = name
-            out = out.replacingOccurrences(of: name, with: token, options: .caseInsensitive)
+        // Une passe sur le texte initial : les jetons produits ne peuvent pas être remasqués.
+        let known = Set(names + emails).filter { $0.count > 1 }.sorted { $0.count > $1.count }
+        let alternatives = known.map { "(?<![\\p{L}\\p{N}_])" + NSRegularExpression.escapedPattern(for: $0) + "(?![\\p{L}\\p{N}_])" }
+        let email = #"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#
+        guard let regex = try? NSRegularExpression(pattern: ([email] + alternatives).joined(separator: "|"), options: .caseInsensitive) else { return (text, mask) }
+        let ns = text as NSString
+        var index = 0
+        for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
+            let original = ns.substring(with: match.range)
+            let prefix = original.contains("@") ? "ADRESSE_" : "PERSONNE_"
+            var token: String
+            repeat { index += 1; token = prefix + String(index) } while text.contains(token)
+            mask.mapping[token] = original
+            out = (out as NSString).replacingCharacters(in: match.range, with: token)
         }
         return (out, mask)
     }
     public func restore(_ text: String) -> String {
-        mapping.reduce(text) { $0.replacingOccurrences(of: $1.key, with: $1.value) }
+        guard !mapping.isEmpty, let regex = try? NSRegularExpression(pattern: mapping.keys.sorted { $0.count > $1.count }.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")) else { return text }
+        var restored = text
+        let ns = text as NSString
+        for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
+            guard let value = mapping[ns.substring(with: match.range)] else { continue }
+            restored = (restored as NSString).replacingCharacters(in: match.range, with: value)
+        }
+        return restored
     }
 }

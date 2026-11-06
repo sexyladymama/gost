@@ -112,3 +112,15 @@ final class RealCaptureGuardTests: XCTestCase {
         XCTAssertNil(frame, "sans permission macOS : aucune capture, aucune erreur, aucune invite")
     }
 }
+
+final class ForegroundWindowAuditTests: XCTestCase {
+    func testUsesTheFrontWindowRatherThanALargerWindowFromTheSameApp() {
+        let order: [[String: Any]] = [
+            [kCGWindowOwnerPID as String: 900, kCGWindowLayer as String: 1, kCGWindowNumber as String: 1],
+            [kCGWindowOwnerPID as String: 900, kCGWindowLayer as String: 0, kCGWindowNumber as String: 2],
+            [kCGWindowOwnerPID as String: 900, kCGWindowLayer as String: 0, kCGWindowNumber as String: 3]
+        ]
+        XCTAssertEqual(ScreenCaptureKitFrameSource.frontWindowID(in: order, processID: 900), 2)
+        XCTAssertNil(ScreenCaptureKitFrameSource.frontWindowID(in: order, processID: 901))
+    }
+}

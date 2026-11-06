@@ -24,9 +24,10 @@ public actor ExecutionStore {
             cached = archive; return archive
         } catch { throw ExecutionError.storage("Checkpoint illisible ou incompatible ; aucune donnée n'a été écrasée.") }
     }
-    public func commit(_ body: (inout ExecutionArchive) throws -> Void) throws {
+    @discardableResult
+    public func commit<T: Sendable>(_ body: (inout ExecutionArchive) throws -> T) throws -> T {
         try Task.checkCancellation()
-        var candidate = try snapshot(); try body(&candidate)
+        var candidate = try snapshot(); let result = try body(&candidate)
         try Task.checkCancellation()
         if failSaves > 0 { failSaves -= 1; throw ExecutionError.storage("Échec de checkpoint injecté pour le test.") }
         if let url {
@@ -35,6 +36,7 @@ public actor ExecutionStore {
             try encoder.encode(candidate).write(to: url, options: .atomic)
         }
         cached = candidate
+        return result
     }
     func failNextSave() { failSaves += 1 }
 }

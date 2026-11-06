@@ -16,15 +16,15 @@ struct PrivacyView: View {
                         .foregroundStyle(.red)
                 }
             }
-            Section("Ce que fait GHOST PERCEPTION") {
+            Section("Sources, actions et confidentialité") {
                 guarantee("eye", "Il ne lit que les sources que vous avez explicitement autorisées.")
-                guarantee("envelope.badge.shield.half.filled", "E-mail : lecture seule. Aucune réponse, aucun envoi, aucune modification.")
-                guarantee("folder.badge.questionmark", "Dossier : métadonnées uniquement, dans le seul dossier choisi. Aucune lecture de contenu, modification ou suppression.")
-                guarantee("network.slash", "Aucune donnée n'est envoyée à un service tiers. Seules les API Google nécessaires à Gmail sont joignables, et uniquement si vous avez connecté Gmail.")
-                guarantee("rectangle.dashed.badge.record", "Aucune capture d'écran, aucune frappe clavier, aucune observation de vos applications.")
-                guarantee("scope", "Le cerveau propose des missions mais n'exécute rien : aucun envoi, aucune modification de fichier, aucune action sans votre validation.")
+                guarantee("envelope.badge.shield.half.filled", "Gmail : lecture seule. Les brouillons peuvent être rédigés localement ; un envoi par Mail exige votre clic sur « Envoyer ».")
+                guarantee("folder.badge.questionmark", "Le dossier surveillé par Perception est limité aux métadonnées. Le scénario Excel demande séparément la lecture du contenu CSV/TSV et la création des résultats dans un dossier de sortie autorisé.")
+                guarantee("network.slash", "Avec votre autorisation, Gmail contacte Google, les recherches contactent Apple Plans ou DuckDuckGo et le modèle externe contacte Anthropic. Le modèle Apple et l’OCR travaillent sur le Mac.")
+                guarantee("rectangle.dashed.badge.record", "Après consentement, GHOST capture la fenêtre de l’application au premier plan pour y lire les demandes et rendez-vous. Les images ne sont pas enregistrées ; les extraits utiles restent dans la mémoire locale. Aucune frappe clavier n’est enregistrée.")
+                guarantee("scope", "Selon vos autorisations, GHOST prépare des brouillons, cherche en ligne, crée des fichiers dans le dossier choisi et ajoute des rendez-vous à l’agenda. Pause suspend les nouveaux traitements. Un envoi déjà engagé ne peut pas être rappelé.")
                 guarantee("key", "Les jetons Google sont stockés dans le Trousseau macOS.")
-                guarantee("list.bullet.rectangle", "Chaque accès à une source est inscrit dans le journal d'accès.")
+                guarantee("list.bullet.rectangle", "La perception journalise ses accès. Les exécutions et les ajouts à l’agenda conservent aussi leur historique local.")
             }
 
             Section("Perception") {
@@ -36,7 +36,7 @@ struct PrivacyView: View {
                 }
             }
 
-            Section("Données collectées") {
+            Section("Données collectées et livrables") {
                 LabeledContent("Événements enregistrés", value: "\(perception.center.events.count)")
                 LabeledContent("Emplacement") {
                     Text(perception.system.profile.directory.path)
@@ -54,7 +54,7 @@ struct PrivacyView: View {
                 Task { await perception.deleteCollectedData(includingAccessLog: true) }
             }
         } message: {
-            Text("Les événements, les états des sources et toute la mémoire de contexte (préférences explicites incluses) seront effacés de ce Mac. Les autorisations restent en place ; révoquez-les dans « Sources ».")
+            Text("Les événements, la mémoire, les missions, les brouillons et les registres d’activité seront effacés de GHOST. Les fichiers créés et les rendez-vous déjà ajoutés resteront dans vos dossiers et votre agenda. Les autorisations restent en place ; révoquez-les dans « Sources ».")
         }
     }
 

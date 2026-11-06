@@ -8,8 +8,8 @@
 // - `GhostContext`    : mémoire contextuelle locale (Mission 003).
 // - `GhostBrain`      : cerveau décisionnel — objectifs, décisions, missions, plans (Mission 004).
 //
-// Aucune dépendance externe. Aucun code SwiftUI/AppKit : tout est
-// compilable et testable avec `swift test`, y compris hors de Xcode.
+// ZIPFoundation est épinglé pour XLSX. Vision/Mind utilisent les frameworks macOS.
+// La logique et ses tests sont exécutables avec `swift test`, hors de Xcode.
 
 import PackageDescription
 
@@ -43,6 +43,6 @@ let package = Package(
         .target(name: "GhostVision", dependencies: ["GhostPerception"]),
         .testTarget(name: "GhostVisionTests", dependencies: ["GhostVision", "GhostPerception", "GhostContext", "GhostBrain"]),
         .target(name: "GhostMind", dependencies: ["GhostBrain", "GhostContext", "GhostPerception"]),
-        .testTarget(name: "GhostMindTests", dependencies: ["GhostMind", "GhostBrain", "GhostContext", "GhostPerception", "GhostVision"])
+        .testTarget(name: "GhostMindTests", dependencies: ["GhostMind", "GhostBrain", "GhostContext", "GhostPerception", "GhostVision"], exclude: ["Fixtures"])
     ]
 )

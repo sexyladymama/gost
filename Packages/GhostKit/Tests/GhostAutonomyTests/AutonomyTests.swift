@@ -331,3 +331,45 @@ final class AutonomyTests: XCTestCase {
         do { _ = try SecureFiles.canonical(URL(fileURLWithPath: "/nonexistent-\(UUID())")); XCTFail() } catch {}
     }
 }
+
+extension AutonomyTests {
+    func testConcurrentPreparationCreatesOneStableExecution() async throws {
+        let f = try await AutonomyFixture.make(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let ids = try await withThrowingTaskGroup(of: String.self) { group in
+            for _ in 0..<24 { group.addTask { try await f.engine.prepare(missionID: f.missionID) } }
+            var ids: [String] = []; for try await id in group { ids.append(id) }; return ids
+        }
+        XCTAssertEqual(Set(ids).count, 1)
+        let archive = try await f.engine.snapshot()
+        XCTAssertEqual(archive.executions.count, 1)
+    }
+    func testRepreparationCannotSilentlyDropSensitiveFlag() async throws {
+        let f = try await AutonomyFixture.make(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let first = try await f.engine.prepare(missionID: f.missionID)
+        let second = try await f.engine.prepare(missionID: f.missionID, declaredSensitive: true)
+        XCTAssertEqual(first, second)
+        try await f.engine.authorize(first, input: f.input, output: f.output, allowReadContents: true, allowCreate: true)
+        let result = try await f.run(first)
+        XCTAssertEqual(result.state, .waitingForApproval); XCTAssertEqual(result.approvalKind, "sensitive")
+    }
+    func testFailedExecutionCanBeCancelledAndReplacedAfterCorrection() async throws {
+        let f = try await AutonomyFixture.make(); defer { try? FileManager.default.removeItem(at: f.root) }
+        try Data("produit,quantite,prix_unitaire\nX,abc,1\n".utf8).write(to: f.input.appendingPathComponent("ventes_nord.csv"))
+        let id = try await f.prepared(), failed = try await f.run(id)
+        XCTAssertEqual(failed.state, .failed)
+        try await f.engine.cancel(id)
+        let next = try await f.engine.prepare(missionID: f.missionID)
+        XCTAssertNotEqual(next, id)
+    }
+    func testTamperingOnDiskCannotProduceSuccessNotification() async throws {
+        let f = try await AutonomyFixture.make(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let id = try await f.prepared(), gate = OperationGate()
+        await f.engine.setAfterTool { tool in if tool == .saveArtifact { await gate.hold() } }
+        try await f.engine.start(id); await gate.wait()
+        let files = try FileManager.default.contentsOfDirectory(at: f.output, includingPropertiesForKeys: nil)
+        try Data("not an Excel file".utf8).write(to: XCTUnwrap(files.first))
+        await gate.release(); await f.engine.waitForIdle(id)
+        let result = try await f.engine.snapshot().executions[id]
+        XCTAssertEqual(result?.state, .failed); XCTAssertEqual(result?.verification?.status, .failed); XCTAssertNil(result?.notification)
+    }
+}

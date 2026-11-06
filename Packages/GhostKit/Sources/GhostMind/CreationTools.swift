@@ -13,8 +13,20 @@ public protocol OutputWriter: Sendable {
 public final class FolderOutputWriter: OutputWriter, @unchecked Sendable {
     private let lock = NSLock()
     private var folder: URL?
-    public init(folder: URL? = nil) { self.folder = folder }
-    public func setFolder(_ url: URL?) { lock.withLock { folder = url } }
+    private var identity: (device: Int32, inode: UInt64)?
+    public init(folder: URL? = nil) { setFolder(folder) }
+    public func setFolder(_ url: URL?) {
+        lock.withLock {
+            folder = nil; identity = nil
+            guard let url, url.isFileURL else { return }
+            let fd = open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard fd >= 0 else { return }
+            defer { close(fd) }
+            var info = stat()
+            guard fstat(fd, &info) == 0 else { return }
+            folder = url; identity = (info.st_dev, info.st_ino)
+        }
+    }
     public var folderName: String? { lock.withLock { folder?.lastPathComponent } }
 
     static func safeName(_ name: String) -> String {
@@ -25,23 +37,35 @@ public final class FolderOutputWriter: OutputWriter, @unchecked Sendable {
     }
 
     public func write(_ data: Data, preferredName: String) throws -> URL {
-        guard let folder = lock.withLock({ folder }) else { throw MindError.invalid("Aucun dossier de création choisi.") }
+        try lock.withLock { try writeLocked(data, preferredName: preferredName) }
+    }
+    private func writeLocked(_ data: Data, preferredName: String) throws -> URL {
+        try Task.checkCancellation()
+        guard let folder, let identity else { throw MindError.invalid("Aucun dossier de création choisi.") }
+        let root = open(folder.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard root >= 0 else { throw MindError.notAllowed("Le dossier choisi est inaccessible ou a été remplacé.") }
+        defer { close(root) }
+        var info = stat()
+        guard fstat(root, &info) == 0, info.st_dev == identity.device, info.st_ino == identity.inode else {
+            throw MindError.notAllowed("Le dossier choisi a été remplacé : choisissez-le à nouveau.")
+        }
         guard data.count <= 20 * 1_024 * 1_024 else { throw MindError.invalid("Fichier trop volumineux.") }
         let name = Self.safeName(preferredName)
         let ext = (name as NSString).pathExtension, stem = (name as NSString).deletingPathExtension
         for n in 1...99 {
             let candidate = n == 1 ? name : stem + " (\(n))" + (ext.isEmpty ? "" : "." + ext)
             let url = folder.appendingPathComponent(candidate)
-            let fd = open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o644)
+            let fd = openat(root, candidate, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
             if fd < 0 { if errno == EEXIST { continue }; throw MindError.invalid("Impossible de créer le fichier dans le dossier choisi.") }
             defer { close(fd) }
             var offset = 0
             while offset < data.count {
+                try Task.checkCancellation()
                 let written = data.withUnsafeBytes { Darwin.write(fd, $0.baseAddress!.advanced(by: offset), $0.count - offset) }
                 guard written > 0 else { throw MindError.invalid("Écriture interrompue.") }
                 offset += written
             }
-            guard fsync(fd) == 0 else { throw MindError.invalid("La synchronisation sur disque a échoué.") }
+            guard fsync(fd) == 0, fsync(root) == 0 else { throw MindError.invalid("La synchronisation sur disque a échoué.") }
             return url
         }
         throw MindError.invalid("Trop de fichiers portent déjà ce nom.")
@@ -65,13 +89,17 @@ public enum SVGGuard {
             return "Élément interdit dans un logo : \(forbidden.trimmingCharacters(in: CharacterSet(charactersIn: "<! ")))."
         }
         if lower.range(of: #"(?:xlink:)?href\s*=\s*["'](?!#)"#, options: .regularExpression) != nil { return "Lien externe interdit." }
+        if lower.contains("@import") || lower.contains("@font-face") || lower.range(of: #"url\s*\(\s*["']?(?!#)"#, options: .regularExpression) != nil {
+            return "Ressource CSS externe ou incorporée interdite."
+        }
         if lower.components(separatedBy: "<").count > 600 { return "SVG trop complexe." }
         // Les dimensions doivent figurer sur l'élément <svg> lui-même (et non sur un enfant).
         guard let open = lower.range(of: "<svg"), let close = lower[open.lowerBound...].firstIndex(of: ">") else { return "SVG mal formé." }
         let rootTag = lower[open.lowerBound..<close]
         guard rootTag.contains("viewbox") || (rootTag.contains("width=") && rootTag.contains("height=")) else { return "SVG sans dimensions." }
         let parser = XMLParser(data: Data(svg.utf8)); parser.shouldResolveExternalEntities = false
-        guard parser.parse() else { return "SVG mal formé." }
+        let policy = SVGElementPolicy(); parser.delegate = policy
+        guard parser.parse(), policy.accepted else { return "SVG mal formé ou élément actif interdit." }
         return nil
     }
 
@@ -99,6 +127,17 @@ public enum SVGGuard {
         return (rep.representation(using: .png, properties: [:]), nil)
     }
     #endif
+}
+
+/// Un SVG de logo est une image déclarative : aucun script, animation, feuille CSS ou élément inconnu.
+private final class SVGElementPolicy: NSObject, XMLParserDelegate {
+    var accepted = true
+    private let allowed: Set<String> = ["svg", "g", "rect", "circle", "ellipse", "path", "polygon", "polyline", "line", "text", "tspan", "defs", "lineargradient", "radialgradient", "stop", "clippath", "mask", "title", "desc"]
+    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes: [String: String]) {
+        guard allowed.contains(elementName.lowercased()), !attributes.keys.contains(where: { $0.lowercased().hasPrefix("on") }) else {
+            accepted = false; parser.abortParsing(); return
+        }
+    }
 }
 
 /// Génération de logos et de documents par le modèle de langage (jamais de contenu inventé en l'absence de modèle).

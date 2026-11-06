@@ -24,7 +24,8 @@ jobs:
             -scheme GhostShell \
             -configuration Debug \
             -destination 'platform=macOS' \
-            -derivedDataPath build
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Automatic
 
       - name: Launch smoke test (app must start and stay running)
         run: |
@@ -45,4 +46,5 @@ jobs:
             -project GhostShell.xcodeproj \
             -scheme GhostShell \
             -destination 'platform=macOS' \
-            -derivedDataPath build
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Automatic

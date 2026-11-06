@@ -77,7 +77,7 @@ une simple formule de politesse sur une page web (« please subscribe ») ne dev
 
 ## Tests
 
-`swift test --package-path Packages/GhostKit --filter GhostVisionTests` (22 tests) : filtre de vie privée (applications, fenêtres, secrets,
+`swift test --package-path Packages/GhostKit --filter GhostVisionTests` : filtre de vie privée (applications, fenêtres, secrets,
 mots entiers), regroupement en blocs, extraction de rendez-vous (certain / question / hypothèse / sans heure / promotion / annulation / échéance),
 **vrai OCR d'Apple** sur une image générée (accents français compris), source écran (blocs utiles, dédoublonnage, applications exclues jamais lues,
 secrets, formules de politesse, autorisation requise), agent d'agenda (ajout vérifié, doublons, suggestions, passé, annulation sélective,
@@ -100,3 +100,9 @@ pause), et vraie capture sans permission = rien.
   personnalisable.
 - L'accès à l'agenda demande l'accès **complet** (nécessaire pour vérifier et éviter les doublons).
 - Les titres de fenêtre et extraits de 160 caractères sont conservés localement dans les événements, sans chiffrement applicatif ajouté.
+
+## Audit du 6 novembre 2026
+
+La capture réelle sélectionne la première fenêtre de l'application dans l'ordre de superposition, sans choisir une autre fenêtre parce qu'elle est plus grande. Les exclusions sont contrôlées avant capture puis avant OCR. Ce choix est testé sur des listes fictives ; le parcours réel reste à vérifier.
+
+Chaque nouvel ajout agenda porte un marqueur unique enregistré avant écriture. La reprise n'adopte que les événements portant ce marqueur ; un ajout interrompu sans preuve devient une suggestion à confirmer. L'annulation refuse un événement dont la provenance a disparu, y compris les anciens ajouts sans marqueur. La vérification porte aussi sur l'heure de fin. Pause et révocation sont recontrôlées avant l'écriture ; un ajout déjà engagé peut finir. Voir [le rapport d'audit](AUDIT_2026_11_06.md).

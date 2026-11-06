@@ -182,7 +182,7 @@ final class CalendarAgentTests: XCTestCase {
         let count = await calendar2.store.count
         XCTAssertEqual(count, 1, "la reprise retrouve l'événement déjà créé au lieu d'en créer un second")
         let _a9 = try await crashy.entries().first?.status
-        XCTAssertEqual(_a9, .alreadyPresent)
+        XCTAssertEqual(_a9, .added)
     }
 
     func testLedgerPersistsIsNeverOverwrittenWhenCorruptAndCanBeErased() async throws {
@@ -258,5 +258,98 @@ final class ScreenEndToEndTests: XCTestCase {
         // Le journal d'accès ne contient aucune requête réseau.
         let log = await system.accessLog.all()
         XCTAssertFalse(log.contains { $0.operation == "network.request" })
+    }
+}
+
+private actor CalendarReadGate {
+    private var entered = false, open = false
+    private var waiter: CheckedContinuation<Void, Never>?
+    func hold() async { entered = true; if !open { await withCheckedContinuation { waiter = $0 } } }
+    func release() { open = true; waiter?.resume(); waiter = nil }
+    func wait() async throws {
+        for _ in 0..<200 { if entered { return }; try await Task.sleep(for: .milliseconds(10)) }
+        throw CalendarError.storage("Le traitement de test n'a pas démarré.")
+    }
+}
+final class CalendarSafetyAuditTests: XCTestCase {
+    private func setup(ledger: URL? = nil) async -> (CalendarAgent, FakeCalendar, TrustEngine) {
+        let trust = TrustEngine(accessLog: AccessLog())
+        await trust.grant(CalendarAgent.sourceID, permission: .writeCalendar, scope: "agenda fictif")
+        let writer = FakeCalendar()
+        return (CalendarAgent(writer: writer, trust: trust, ledgerURL: ledger, calendar: visionCalendar, clock: { visionNow }), writer, trust)
+    }
+    func testRevocationWhileReadingAgendaPreventsCreation() async throws {
+        let (agent, writer, trust) = await setup(), gate = CalendarReadGate()
+        await writer.setEventsHook { await gate.hold() }
+        let task = Task { await agent.consume([apptEvent(draft())]) }; try await gate.wait()
+        await trust.revoke(CalendarAgent.sourceID); await gate.release(); await task.value
+        let count = await writer.store.count
+        XCTAssertEqual(count, 0)
+    }
+    func testPauseWhileReadingAgendaPreventsCreation() async throws {
+        let (agent, writer, _) = await setup(), gate = CalendarReadGate()
+        await writer.setEventsHook { await gate.hold() }
+        let task = Task { await agent.consume([apptEvent(draft())]) }; try await gate.wait()
+        await agent.setActive(false); await gate.release(); await task.value
+        let count = await writer.store.count
+        XCTAssertEqual(count, 0)
+    }
+    func testConcurrentAcceptCreatesOneEvent() async throws {
+        let (agent, writer, _) = await setup(), gate = CalendarReadGate()
+        await agent.consume([apptEvent(draft(certain: false))])
+        let entries = try await agent.entries(), id = try XCTUnwrap(entries.first?.id)
+        await writer.setEventsHook { await gate.hold() }
+        let first = Task { try await agent.accept(id) }; try await gate.wait()
+        try await agent.accept(id)
+        await gate.release(); try await first.value
+        let count = await writer.store.count
+        XCTAssertEqual(count, 1)
+    }
+    func testPendingRecoveryCannotClaimAnUnmarkedUserEvent() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), url = root.appendingPathComponent("calendar.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (agent, writer, trust) = await setup(ledger: url)
+        await agent.consume([apptEvent(draft(certain: false))])
+        let entries = try await agent.entries(); var entry = try XCTUnwrap(entries.first)
+        entry.status = .pending
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .secondsSince1970
+        try encoder.encode(CalendarLedger(entries: [entry.id: entry])).write(to: url)
+        let userID = await writer.seed(entry.title, at: entry.start)
+        let reopened = CalendarAgent(writer: writer, trust: trust, ledgerURL: url, clock: { visionNow })
+        await reopened.recoverPending()
+        let after = try await reopened.entries()
+        XCTAssertEqual(after.first?.status, .suggested); XCTAssertNil(after.first?.eventIdentifier)
+        do { try await reopened.undo(entry.id); XCTFail() } catch {}
+        let stillThere = try await writer.fetch(userID)
+        XCTAssertNotNil(stillThere)
+    }
+    func testUndoRefusesAnEventWhoseProvenanceWasRemoved() async throws {
+        let (agent, writer, _) = await setup()
+        await agent.consume([apptEvent(draft())])
+        let entries = try await agent.entries(), entry = try XCTUnwrap(entries.first), id = try XCTUnwrap(entry.eventIdentifier)
+        await writer.removeMarker(id)
+        do { try await agent.undo(entry.id); XCTFail() } catch {}
+        let preserved = try await writer.fetch(id)
+        XCTAssertNotNil(preserved)
+    }
+}
+
+extension CalendarSafetyAuditTests {
+    func testLegacySuggestionGetsProvenanceBeforeItsFirstCreation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), url = root.appendingPathComponent("calendar.json")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (agent, writer, trust) = await setup(ledger: url)
+        await agent.consume([apptEvent(draft(certain: false))])
+        let entries = try await agent.entries(); var entry = try XCTUnwrap(entries.first)
+        entry.ownershipToken = nil
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .secondsSince1970
+        try encoder.encode(CalendarLedger(entries: [entry.id: entry])).write(to: url)
+        let reopened = CalendarAgent(writer: writer, trust: trust, ledgerURL: url, clock: { visionNow })
+        try await reopened.accept(entry.id)
+        let added = try await reopened.entries()
+        XCTAssertEqual(added.first?.status, .added); XCTAssertNotNil(added.first?.ownershipToken)
+        try await reopened.undo(entry.id)
+        let count = await writer.store.count
+        XCTAssertEqual(count, 0)
     }
 }

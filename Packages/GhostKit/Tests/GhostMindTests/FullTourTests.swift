@@ -135,14 +135,18 @@ final class FullTourTests: XCTestCase {
         guard case .available = availability else { throw XCTSkip("modèle indisponible : \(availability)") }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ghost-real-out-\(UUID())")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
         let mail = try await tour(["Tu peux me faire un mail a envoyer a romain.meunier92@gmail.com pour lui dire qu'on a un", "RDV au resto maison sauvage le lundi de la semaine pro stp"], models: [model])
         let d = try XCTUnwrap(mail.state.drafts.values.first)
-        print("TOUR vrai mail: status=\(d.status) par=\(d.generatedBy ?? "?")\nObjet: \(d.subject)\n\(d.body)\nNote: \(d.note ?? "-")")
+        XCTAssertEqual(d.status, .ready, d.note ?? "")
+        print("TOUR vrai mail: status=\(d.status) par=\(d.generatedBy)\nObjet: \(d.subject)\n\(d.body)\nNote: \(d.note ?? "-")")
         let logo = try await tour(["Crée un logo pour une salle de boxe qui s'appelle Noche"], models: [model], output: FolderOutputWriter(folder: dir))
         let l = try XCTUnwrap(logo.state.creations.values.first)
+        XCTAssertEqual(l.status, .done, l.note ?? "")
         print("TOUR vrai logo: status=\(l.status) fichiers=\(l.paths) note=\(l.note ?? "-")  dossier=\(dir.path)")
         let doc = try await tour(["Rédige une lettre de motivation pour un stage en marketing"], models: [model], output: FolderOutputWriter(folder: dir))
         let c = try XCTUnwrap(doc.state.creations.values.first)
+        XCTAssertEqual(c.status, .done, c.note ?? "")
         print("TOUR vrai document: status=\(c.status) fichiers=\(c.paths) note=\(c.note ?? "-")")
     }
 }

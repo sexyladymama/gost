@@ -611,3 +611,149 @@ final class LogoSpecTests: XCTestCase {
         XCTAssertEqual(c.subject, "Rdv lundi")
     }
 }
+
+// MARK: - Audit : opérations suspendues, suppression et concurrence
+
+private actor AuditGate {
+    private var open = false
+    private(set) var calls = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func hold() async { calls += 1; if !open { await withCheckedContinuation { waiters.append($0) } } }
+    func release() { open = true; let pending = waiters; waiters = []; pending.forEach { $0.resume() } }
+    func waitUntilEntered() async throws {
+        for _ in 0..<200 { if calls > 0 { return }; try await Task.sleep(for: .milliseconds(10)) }
+        throw MindError.invalid("Le traitement de test n'a pas démarré.")
+    }
+}
+private struct DelayedModel: LanguageModel {
+    var name = "Modèle suspendu de test"; var isLocal = true; var isSimulated = true
+    let gate: AuditGate
+    var answer = goodJSON
+    func availability() async -> LanguageModelAvailability { .available }
+    func generate(system: String, prompt: String) async throws -> String { await gate.hold(); return answer }
+}
+private struct DelayedSender: MailSender {
+    let gate: AuditGate
+    func send(to: String, subject: String, body: String) async throws { await gate.hold() }
+}
+
+final class MindConcurrencyAuditTests: XCTestCase {
+    private func mind(_ env: Env, models: [LanguageModel], sender: MailSender = FakeSender(), output: OutputWriter? = nil) -> MindEngine {
+        MindEngine(profile: GhostProfile(id: "audit", baseDirectory: FileManager.default.temporaryDirectory), brain: env.brain, context: env.context, trust: env.trust,
+                   models: models, sender: sender, userName: "Romain", output: output, persistent: false)
+    }
+    func testConcurrentReplayGeneratesOnlyOneDraft() async throws {
+        let gate = AuditGate(), env = try await Env.make(models: [])
+        let engine = mind(env, models: [DelayedModel(gate: gate)])
+        let event = try await env.request("Écris un mail à Paul pour décaler jeudi")
+        let first = Task { await engine.consume([event]) }
+        try await gate.waitUntilEntered()
+        await engine.consume([event])
+        await gate.release(); await first.value
+        let state = try await engine.snapshot(), calls = await gate.calls
+        XCTAssertEqual(state.drafts.count, 1); XCTAssertEqual(calls, 1)
+    }
+    func testDeletingMemoryDuringGenerationCannotRestoreDrafts() async throws {
+        let gate = AuditGate(), env = try await Env.make(models: [])
+        let engine = mind(env, models: [DelayedModel(gate: gate)])
+        let event = try await env.request("Écris un mail à Paul pour décaler jeudi")
+        let task = Task { await engine.consume([event]) }; try await gate.waitUntilEntered()
+        try await engine.deleteMemory(); await gate.release(); await task.value
+        let state = try await engine.snapshot()
+        XCTAssertTrue(state.drafts.isEmpty); XCTAssertTrue(state.handled.isEmpty)
+    }
+    func testPausePreventsLateCreationAndAllowsExplicitReplay() async throws {
+        let gate = AuditGate(), env = try await Env.make(models: [])
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let engine = mind(env, models: [DelayedModel(gate: gate, answer: goodDocument)], output: FolderOutputWriter(folder: dir))
+        let event = try await env.request("Rédige une lettre de motivation pour un stage")
+        let task = Task { await engine.consume([event]) }; try await gate.waitUntilEntered()
+        await engine.setAutonomous(false); await gate.release(); await task.value
+        let paused = try await engine.snapshot()
+        XCTAssertTrue(paused.creations.isEmpty); XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+        await engine.setAutonomous(true); await engine.consume([event])
+        let resumed = try await engine.snapshot()
+        XCTAssertEqual(resumed.creations.values.first?.status, .done)
+    }
+    func testSendCompletionPreservesAnotherDraftCreatedWhileSending() async throws {
+        let gate = AuditGate(), env = try await Env.make(models: [])
+        let engine = mind(env, models: [ScriptedModel(reply: { _ in goodJSON })], sender: DelayedSender(gate: gate))
+        await engine.consume([try await env.request("Écris un mail à paul@example.test pour décaler jeudi")])
+        let before = try await engine.snapshot(), id = try XCTUnwrap(before.drafts.keys.first)
+        let sending = Task { try await engine.send(id, confirmedByUser: true) }; try await gate.waitUntilEntered()
+        await engine.consume([try await env.request("Écris un mail à marie@example.test pour confirmer vendredi")])
+        await gate.release(); try await sending.value
+        let after = try await engine.snapshot()
+        XCTAssertEqual(after.drafts.count, 2); XCTAssertEqual(after.drafts[id]?.status, .sent)
+    }
+    func testDeleteDuringConfirmedSendCannotRestoreMemory() async throws {
+        let gate = AuditGate(), env = try await Env.make(models: [])
+        let engine = mind(env, models: [ScriptedModel(reply: { _ in goodJSON })], sender: DelayedSender(gate: gate))
+        await engine.consume([try await env.request("Écris un mail à paul@example.test pour décaler jeudi")])
+        let before = try await engine.snapshot(), id = try XCTUnwrap(before.drafts.keys.first)
+        let sending = Task { try await engine.send(id, confirmedByUser: true) }; try await gate.waitUntilEntered()
+        try await engine.deleteMemory(); await gate.release(); try await sending.value
+        let after = try await engine.snapshot()
+        XCTAssertTrue(after.drafts.isEmpty); XCTAssertTrue(after.handled.isEmpty)
+    }
+    func testEditingDuringRedoWinsOverTheLateModelResponse() async throws {
+        let gate = AuditGate(), env = try await Env.make(models: [])
+        // Génération initiale sans modèle ; le moteur à tester relit le même état persistant.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let profile = GhostProfile(id: "redo", baseDirectory: dir)
+        let first = MindEngine(profile: profile, brain: env.brain, context: env.context, trust: env.trust, models: [], sender: FakeSender(), userName: "Romain")
+        await first.consume([try await env.request("Écris un mail à paul@example.test pour décaler jeudi")])
+        let engine = MindEngine(profile: profile, brain: env.brain, context: env.context, trust: env.trust, models: [DelayedModel(gate: gate)], sender: FakeSender(), userName: "Romain")
+        let initial = try await engine.snapshot(), id = try XCTUnwrap(initial.drafts.keys.first)
+        let redo = Task { try await engine.redo(id) }; try await gate.waitUntilEntered()
+        try await engine.edit(id, to: "paul@example.test", subject: "Mon objet relu", body: "Mon texte corrigé pendant la rédaction.")
+        await gate.release(); do { try await redo.value; XCTFail("Une réponse périmée doit être abandonnée") } catch is CancellationError {}
+        let after = try await engine.snapshot()
+        XCTAssertEqual(after.drafts[id]?.subject, "Mon objet relu")
+    }
+    func testCreationFolderReplacementAndRevocationAreBlocked() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let selected = root.appendingPathComponent("sortie"), moved = root.appendingPathComponent("ancienne")
+        try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let output = FolderOutputWriter(folder: selected)
+        try FileManager.default.moveItem(at: selected, to: moved)
+        try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
+        XCTAssertThrowsError(try output.write(Data("test".utf8), preferredName: "test.txt"))
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: selected.path).isEmpty)
+        output.setFolder(moved); output.setFolder(nil)
+        XCTAssertThrowsError(try output.write(Data("test".utf8), preferredName: "test.txt"))
+    }
+}
+
+final class MaskingAuditTests: XCTestCase {
+    func testManyTokensAndLiteralTokensRestoreWithoutPrefixCollisions() {
+        let names = (1...14).map { "Contact\($0)" }
+        let text = names.joined(separator: ", ") + " PERSONNE_1 autre@example.test"
+        let (masked, mask) = ReversibleMask.mask(text, names: names, emails: [])
+        XCTAssertFalse(masked.contains("@")); XCTAssertFalse(masked.contains("Contact"))
+        XCTAssertEqual(mask.restore(masked), text)
+    }
+    func testKnownNamesAreWholeWordsAndEmailMaskingPreservesCase() {
+        let text = "Paul parle à Pauline et JEAN@EXAMPLE.TEST"
+        let (masked, mask) = ReversibleMask.mask(text, names: ["Paul"], emails: [])
+        XCTAssertTrue(masked.contains("Pauline")); XCTAssertFalse(masked.contains("@"))
+        XCTAssertEqual(mask.restore(masked), text)
+    }
+}
+
+final class SVGActiveContentAuditTests: XCTestCase {
+    func testCSSRemoteAssetsAndAnimationsAreRefused() {
+        for content in [
+            #"<rect width="10" height="10" style="fill:url(https://example.test/secret.svg)"/>"#,
+            #"<rect width="10" height="10" onmouseover="alert(1)"/>"#,
+            #"<set attributeName="href" to="https://example.test/x"/>"#,
+            #"<style>@import 'https://example.test/x.css';</style>"#
+        ] {
+            XCTAssertNotNil(SVGGuard.problem("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">" + content + "</svg>"))
+        }
+    }
+}
