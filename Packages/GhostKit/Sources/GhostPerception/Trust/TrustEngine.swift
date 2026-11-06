@@ -14,6 +14,8 @@ public enum Permission: String, Codable, Sendable {
     case writeCalendar
     /// Interroger un service de recherche en ligne (lieux avec Apple Plans) pour répondre à une demande.
     case searchOnline
+    /// Objectifs saisis volontairement par l'utilisateur, sans accès à une autre source.
+    case submitObjective
 }
 
 /// Autorisation accordée par l'utilisateur.

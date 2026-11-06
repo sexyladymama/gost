@@ -28,6 +28,8 @@ public final class FolderOutputWriter: OutputWriter, @unchecked Sendable {
         }
     }
     public var folderName: String? { lock.withLock { folder?.lastPathComponent } }
+    /// Dossier choisi par l'utilisateur (pour relire ce que GHOST y a écrit ou ce que l'utilisateur y a déposé).
+    public var folderURL: URL? { lock.withLock { folder } }
 
     static func safeName(_ name: String) -> String {
         let base = (name as NSString).lastPathComponent

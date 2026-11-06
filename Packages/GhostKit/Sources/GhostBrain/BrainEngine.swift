@@ -65,6 +65,58 @@ public actor BrainEngine: PerceptionEventConsumer {
 
     public func snapshot() async throws -> BrainState { try await store.snapshot() }
 
+    /// Une saisie utilisateur crée une mission canonique, même si les règles ne connaissent pas encore le scénario.
+    /// Cette méthode n'est exposée à aucun outil du modèle.
+    public func submitObjective(_ text: String, scope: ContextScope, requestID: UUID) async throws -> String {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isActive, scope != .unclassified, (3...4_000).contains(clean.count) else { throw BrainError.invalid("Objectif ou contexte invalide, ou GHOST en pause.") }
+        let source = EventSource(id: SourceID("user-objectives-" + scope.rawValue), kind: .user, displayName: "Objectif utilisateur")
+        await trust.grant(source.id, permission: .submitObjective, scope: scope.rawValue)
+        if try await context.snapshot().scopes[source.id.rawValue] != scope { try await context.setScope(scope, for: source.id) }
+        let event = GhostEvent(id: requestID, fingerprint: "objective:" + requestID.uuidString, kind: .task, tags: [.request, .task],
+            summary: clean, source: source, detectedAt: clock(), occurredAt: clock(), title: String(clean.prefix(140)),
+            expectedAction: clean, confidence: 1, evidence: [Evidence(rule: "user.objective", explanation: "Objectif saisi et confirmé par l'utilisateur.", excerpt: clean)], isMissionCandidate: true)
+        let key = Self.ledgerKey(event)
+        if let record = try await store.snapshot().ledger[key], let mission = try await store.snapshot().decisions.first(where: { $0.id == record.decisionID })?.missionID { return mission }
+        let epoch = await store.currentProcessingEpoch()
+        try await context.ingest([event])
+        let graph = try await context.snapshot(), grants = await GrantSnapshot.load(from: trust), state = try await store.snapshot()
+        let input = BrainInput(event: event, signals: BrainSignals.read(event), lens: ContextLens(graph: graph, event: event), state: state, grants: grants, now: clock(), config: config)
+        var goal = GoalEngine.formalize(input); goal.kind = .explicitRequest; goal.expectedResult = clean
+        let analysis = ReasoningEngine.analyze(input, goal: goal)
+        let outcome = DecisionOutcome(kind: .createMission, dedupeKey: input.lens.namespace + "|objective|" + requestID.uuidString,
+            goal: goal, analysis: analysis, reasons: ["Objectif explicite ; les permissions d'action restent séparées."], confidence: 1)
+        let record = DecisionRecord(date: clock(), kind: .createMission, missionID: nil, eventIDs: [event.id], usedElements: [], reasons: outcome.reasons,
+                                    confidence: 1, alternatives: [], uncertainties: [], engine: "user", modelProvider: nil, modelIsSimulated: false)
+        guard isActive else { throw BrainError.staleProcessing }
+        try await store.commit(expectedEpoch: epoch) { state in
+            if state.ledger[key] != nil { return }
+            try Self.apply(outcome, input: input, record: record, key: key, to: &state)
+            if let id = state.decisions.last?.missionID { state.missions[id]?.verdict = .confirmed }
+        }
+        guard let id = try await store.snapshot().decisions.first(where: { $0.eventIDs.contains(requestID) })?.missionID else { throw BrainError.unknownMission }
+        await publish(); return id
+    }
+
+    /// Core reports execution evidence; a model answer does not silently complete a Brain mission.
+    public func recordCoreActivity(_ id: String, sessionID: String, summary: String) async throws {
+        try await store.commit { state in
+            guard var m = state.missions[id], m.isOpen else { throw BrainError.unknownMission }
+            m.history.append(HistoryEntry(date: self.clock(), kind: "core:" + sessionID, summary: String(summary.prefix(1_000))))
+            m.updatedAt = self.clock(); state.missions[id] = m
+        }
+        await publish()
+    }
+    public func acceptCoreResult(_ id: String) async throws {
+        try await store.commit { state in
+            guard var m = state.missions[id], m.isOpen, m.history.contains(where: { $0.kind.hasPrefix("core:") }) else { throw BrainError.unknownMission }
+            m.state = .completed
+            m.history.append(HistoryEntry(date: self.clock(), kind: "completed", summary: "Résultat Core relu et validé explicitement par l'utilisateur.", byUser: true))
+            m.updatedAt = self.clock(); state.missions[id] = m
+        }
+        await publish()
+    }
+
     // MARK: Traitement
 
     static func ledgerKey(_ e: GhostEvent) -> String { e.source.id.rawValue + "|" + e.fingerprint }

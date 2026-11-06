@@ -133,6 +133,28 @@ public actor MindEngine: PerceptionEventConsumer {
         try save(s)
     }
 
+    /// Brouillon demandé par GHOST Core. Rien n'est envoyé ici : l'envoi reste `send(_:confirmedByUser:)`.
+    /// L'identifiant dépend de `key` : refaire la même demande remplace le brouillon au lieu d'en créer un second.
+    public func prepareDraft(missionID: String, key: String, namespace: String, request: String, recipient: String?, topic: String) async throws -> MailDraft {
+        let token = try begin(missionID); defer { finish(token) }
+        let graph = try await context.snapshot()
+        let match = RecipientResolver.resolve(hint: recipient, in: graph, namespace: namespace)
+        let name = match?.name ?? recipient
+        let made = try await generate(request: request, recipientName: name, recipientEmail: match?.email, topic: topic, token: token)
+        try check(token)
+        var note = made.note
+        if match == nil { note = [note, "Destinataire à préciser : aucune adresse connue."].compactMap { $0 }.joined(separator: " ") }
+        let id = String(Digest.sha256(Data(("core-mail|" + key).utf8)).map { String(format: "%02x", $0) }.joined().prefix(24))
+        let now = clock()
+        let draft = MailDraft(id: id, missionID: missionID, recipientName: name, recipientEmail: match?.email, subject: made.subject, body: made.body,
+                              status: made.usedModel ? .ready : .needsModel, version: 1, generatedBy: made.by, basis: request, note: note, createdAt: now, updatedAt: now)
+        var s = try load()
+        if let old = s.drafts[id], old.status == .sending || old.status == .sent { return old }
+        s.drafts[id] = draft
+        try save(s)
+        return draft
+    }
+
     private struct Made { var subject: String; var body: String; var by: String; var usedModel: Bool; var note: String? }
 
     private func generate(request: String, recipientName: String?, recipientEmail: String?, topic: String, token: WorkToken) async throws -> Made {

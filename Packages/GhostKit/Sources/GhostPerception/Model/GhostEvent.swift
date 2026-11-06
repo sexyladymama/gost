@@ -41,6 +41,8 @@ public enum SourceKind: String, Codable, Sendable {
     case folder
     /// Texte lu à l'écran (blocs utiles uniquement, jamais d'image).
     case screen
+    /// Objectif saisi explicitement dans GHOST, aucune observation en arrière-plan.
+    case user
 
     /// Permission que l'utilisateur doit avoir accordée pour qu'une source de ce type soit lue.
     public var requiredPermission: Permission {
@@ -48,6 +50,7 @@ public enum SourceKind: String, Codable, Sendable {
         case .email: return .readMail
         case .folder: return .watchFolder
         case .screen: return .observeScreen
+        case .user: return .submitObjective
         }
     }
 }
