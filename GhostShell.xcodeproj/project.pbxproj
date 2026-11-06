@@ -66,6 +66,9 @@
 		C00700000000000000000003 /* MindEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00700000000000000000013 /* MindEndToEndTests.swift */; };
 		C00700000000000000000021 /* GhostMind in Frameworks */ = {isa = PBXBuildFile; productRef = C00700000000000000000031 /* GhostMind */; };
 		C00700000000000000000022 /* GhostMind in Frameworks */ = {isa = PBXBuildFile; productRef = C00700000000000000000032 /* GhostMind */; };
+		C01000000000000000000011 /* GhostCore in Frameworks */ = {isa = PBXBuildFile; productRef = C01000000000000000000031 /* GhostCore */; };
+		C01000000000000000000012 /* GhostCore in Frameworks */ = {isa = PBXBuildFile; productRef = C01000000000000000000032 /* GhostCore */; };
+		C01000000000000000000001 /* ObjectivesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01000000000000000000021 /* ObjectivesView.swift */; };
 		C00800000000000000000001 /* SearchesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00800000000000000000011 /* SearchesView.swift */; };
 		C00900000000000000000001 /* CreationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00900000000000000000011 /* CreationsView.swift */; };
 		F00600000000000000000001 /* FullTourTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00600000000000000000011; };
@@ -121,6 +124,7 @@
 		C00700000000000000000012 /* MindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindTests.swift; sourceTree = "<group>"; };
 		C00700000000000000000013 /* MindEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindEndToEndTests.swift; sourceTree = "<group>"; };
 		C00800000000000000000011 /* SearchesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchesView.swift; sourceTree = "<group>"; };
+		C01000000000000000000021 /* ObjectivesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectivesView.swift; sourceTree = "<group>"; };
 		C00900000000000000000011 /* CreationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreationsView.swift; sourceTree = "<group>"; };
 		F00600000000000000000011 /* FullTourTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullTourTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -137,6 +141,7 @@
 				C00500000000000000000021 /* GhostAutonomy in Frameworks */,
 				C00600000000000000000021 /* GhostVision in Frameworks */,
 				C00700000000000000000021 /* GhostMind in Frameworks */,
+				C01000000000000000000011 /* GhostCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -151,6 +156,7 @@
 				C00500000000000000000022 /* GhostAutonomy in Frameworks */,
 				C00600000000000000000022 /* GhostVision in Frameworks */,
 				C00700000000000000000022 /* GhostMind in Frameworks */,
+				C01000000000000000000012 /* GhostCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -209,6 +215,7 @@
 				C00700000000000000000011 /* DraftsView.swift */,
 				C00800000000000000000011 /* SearchesView.swift */,
 				C00900000000000000000011 /* CreationsView.swift */,
+				C01000000000000000000021 /* ObjectivesView.swift */,
 				C00500000000000000000011 /* AutonomyView.swift */,
 				C00300000000000000000014 /* GhostTheme.swift */,
 				C00300000000000000000015 /* MissionsView.swift */,
@@ -324,6 +331,7 @@
 				C00500000000000000000031 /* GhostAutonomy */,
 				C00600000000000000000031 /* GhostVision */,
 				C00700000000000000000031 /* GhostMind */,
+				C01000000000000000000031 /* GhostCore */,
 			);
 			productName = GhostShell;
 			productReference = 996AD237BC284D463E664FFE /* GhostShell.app */;
@@ -350,6 +358,7 @@
 				C00500000000000000000032 /* GhostAutonomy */,
 				C00600000000000000000032 /* GhostVision */,
 				C00700000000000000000032 /* GhostMind */,
+				C01000000000000000000032 /* GhostCore */,
 			);
 			productName = GhostShellTests;
 			productReference = 50ED88076C07C90FF1B1A76B /* GhostShellTests.xctest */;
@@ -431,6 +440,7 @@
 				C00700000000000000000001 /* DraftsView.swift in Sources */,
 				C00800000000000000000001 /* SearchesView.swift in Sources */,
 				C00900000000000000000001 /* CreationsView.swift in Sources */,
+				C01000000000000000000001 /* ObjectivesView.swift in Sources */,
 				C00600000000000000000003 /* GhostHotKey.swift in Sources */,
 				C00500000000000000000001 /* AutonomyView.swift in Sources */,
 				C00300000000000000000004 /* GhostTheme.swift in Sources */,
@@ -729,6 +739,8 @@
 		C00600000000000000000032 = {isa = XCSwiftPackageProductDependency; productName = GhostVision; };
 		C00700000000000000000031 = {isa = XCSwiftPackageProductDependency; productName = GhostMind; };
 		C00700000000000000000032 = {isa = XCSwiftPackageProductDependency; productName = GhostMind; };
+		C01000000000000000000031 = {isa = XCSwiftPackageProductDependency; productName = GhostCore; };
+		C01000000000000000000032 = {isa = XCSwiftPackageProductDependency; productName = GhostCore; };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;

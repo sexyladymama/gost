@@ -7,6 +7,7 @@ import GhostBrain
 import GhostAutonomy
 import GhostVision
 import GhostMind
+import GhostCore
 import CoreGraphics
 
 /// Configure et pilote les sources de perception depuis l'interface.
@@ -54,6 +55,10 @@ final class PerceptionController {
     private(set) var outputFolderName: String?
     @ObservationIgnored private var executionAccess: [String: [SecurityScopedFolder]] = [:]
     @ObservationIgnored private let gateway: ModelGateway
+    let core: CoreCenter
+    /// Confidentialité des objectifs : modèle local uniquement, sauf choix explicite de l'utilisateur.
+    var corePrivacy: ModelPrivacy = .localOnly
+    private(set) var aiStatus: [String] = []
 
     private(set) var emailMode: EmailMode
     private(set) var gmailAccount: String?
@@ -95,7 +100,7 @@ final class PerceptionController {
         context = ContextCenter(engine: ContextEngine(profile: profile, trust: system.trust, persistent: persistent))
         defaults = persistent ? .standard : UserDefaults(suiteName: "ghost.preview") ?? .standard
         secrets = persistent ? KeychainSecretStore(profileID: profile.id) : InMemorySecretStore()
-        gateway = ModelGateway(providers: [AnthropicProvider(http: system.http, secrets: secrets)], policy: GatewayPolicy(enabled: false),
+        gateway = ModelGateway(providers: [OnDeviceModelProvider(), AnthropicProvider(http: system.http, secrets: secrets)], policy: GatewayPolicy(enabled: false),
                                usageURL: persistent ? profile.directory.appendingPathComponent("model-usage.json") : nil)
         brain = BrainCenter(engine: BrainEngine(profile: profile, context: context.engine, trust: system.trust,
                                                 gateway: gateway, persistent: persistent))
@@ -113,6 +118,9 @@ final class PerceptionController {
                                              searcher: MapKitPlaceSearcher(), webSearcher: DuckDuckGoSearcher(), output: outputWriter,
                                              homeArea: { [defaults] in defaults.string(forKey: "mind.homeArea") },
                                              persistent: persistent))
+        core = CoreCenter(engine: CoreCoordinator(profile: profile, brain: brain.engine, context: context.engine, trust: system.trust, gateway: gateway,
+                                                  mind: mind.engine, web: DuckDuckGoSearcher(), places: MapKitPlaceSearcher(),
+                                                  documents: FolderDocumentStore(writer: outputWriter), persistent: persistent))
         screenEnabled = defaults.bool(forKey: Keys.screenEnabled)
         calendarAutoAdd = defaults.bool(forKey: Keys.calendarAutoAdd)
         onboardingDone = defaults.bool(forKey: Keys.onboardingDone)
@@ -413,6 +421,8 @@ final class PerceptionController {
             try await center.attachConsumer(mind.engine)
         } catch { lastError = error.localizedDescription }
         await mind.reload()
+        await core.engine.recover()
+        await core.reload()
         // L'agent d'agenda reçoit les mêmes événements ; son registre persistant évite tout doublon au rejeu.
         do {
             await calendar.agent.recoverPending()
@@ -448,6 +458,7 @@ final class PerceptionController {
         BrainAwareCore(base: center, onActive: { [weak self] active in
             guard let self else { return }
             await self.mind.engine.setAutonomous(active)
+            await self.core.engine.setActive(active)
             await self.calendar.agent.setActive(active)
             await self.brain.engine.setActive(active)
             await self.execution.engine.setGlobalPaused(!active)
@@ -545,6 +556,15 @@ final class PerceptionController {
         await setExternalModel(enabled: false)
     }
 
+    /// État réel des fournisseurs d'IA (jamais un simulé présenté comme réel).
+    func refreshAIStatus() async {
+        let statuses = await gateway.statuses()
+        aiStatus = statuses.map { st in
+            let kind = st.isLocal ? "local" : "externe"
+            let state = st.available ? "disponible" : "indisponible — \(st.reason ?? "non configuré")"
+            return "\(st.id) (\(kind)) · \(st.model)\(st.isSimulated ? " · SIMULÉ" : "") : \(state)"
+        }
+    }
     func modelCallCount() async -> Int { await gateway.callLog.count }
 
     func deleteCollectedData(includingAccessLog: Bool) async {

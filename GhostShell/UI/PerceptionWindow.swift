@@ -6,11 +6,12 @@ import GhostPerception
 /// et le contrôle complet des sources et des données.
 struct PerceptionWindow: View {
     enum Section: String, CaseIterable, Identifiable {
-        case missions, drafts, searches, creations, agenda, activity, events, memory, issues, sources, accessLog, privacy
+        case objectives, missions, drafts, searches, creations, agenda, activity, events, memory, issues, sources, accessLog, privacy
         var id: String { rawValue }
         var title: String {
             switch self {
             case .events: return "Événements"
+            case .objectives: return "Objectifs"
             case .missions: return "Missions"
             case .drafts: return "Brouillons"
             case .searches: return "Recherches"
@@ -27,6 +28,7 @@ struct PerceptionWindow: View {
         var symbol: String {
             switch self {
             case .events: return "tray.full"
+            case .objectives: return "target"
             case .missions: return "scope"
             case .drafts: return "envelope"
             case .searches: return "magnifyingglass"
@@ -67,6 +69,7 @@ struct PerceptionWindow: View {
         } detail: {
             switch section ?? .missions {
             case .events: EventsView(center: perception.center)
+            case .objectives: ObjectivesView(perception: perception)
             case .missions: MissionsView(perception: perception)
             case .drafts: DraftsView(perception: perception)
             case .searches: SearchesView(perception: perception)
@@ -108,6 +111,7 @@ struct PerceptionWindow: View {
 
     private func badge(for item: Section) -> Int {
         switch item {
+        case .objectives: return perception.core.needsAttention
         case .missions: return perception.brain.missions.filter { [.proposed, .needsClarification].contains($0.state) }.count
         case .drafts: return perception.mind.pending.count
         case .searches: return perception.mind.searches.count

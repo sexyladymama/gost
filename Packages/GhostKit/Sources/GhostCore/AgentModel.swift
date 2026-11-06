@@ -55,10 +55,60 @@ public struct AgentDecision: Codable, Sendable {
     public init(missionID: String, action: AgentAction, text: String? = nil, plan: [AgentPlanItem]? = nil, toolCall: AgentToolCall? = nil, sourceIDs: [String]? = nil) {
         schemaVersion = 1; self.missionID = missionID; self.action = action; self.text = text; self.plan = plan; self.toolCall = toolCall; self.sourceIDs = sourceIDs
     }
+    /// Un petit modèle local respecte mal les détails du format (version et mission oubliées, champs de l'outil au mauvais niveau, dépendances en objets).
+    /// Ces écarts bénins sont réparés de façon déterministe ; tout le reste (champ inconnu, outil inconnu, autre mission, taille) reste refusé.
+    static func normalize(_ input: [String: Any], missionID: String) throws -> [String: Any] {
+        var o = input
+        // Le nom d'un outil donné comme « action » : le modèle veut appeler cet outil.
+        if let action = o["action"] as? String, CoreToolID(rawValue: action) != nil, o["tool"] == nil { o["tool"] = action; o["action"] = "tool_call" }
+        if o["schemaVersion"] == nil { o["schemaVersion"] = 1 }
+        if o["missionID"] == nil { o["missionID"] = missionID }
+        if o["toolCall"] == nil, o["tool"] != nil {
+            var call: [String: Any] = [:]
+            for key in ["tool", "arguments", "reason", "expectedResult", "id", "missionID"] { if let v = o.removeValue(forKey: key), key != "missionID" { call[key] = v } }
+            o["toolCall"] = call
+        }
+        if var call = o["toolCall"] as? [String: Any] {
+            if call["id"] == nil { call["id"] = "c" + UUID().uuidString.prefix(8) }
+            if call["missionID"] == nil { call["missionID"] = missionID }
+            if (call["reason"] as? String)?.isEmpty != false { call["reason"] = "Étape de la mission." }
+            if (call["expectedResult"] as? String)?.isEmpty != false { call["expectedResult"] = "Résultat de l'outil." }
+            if let args = call["arguments"] as? [String: Any] {
+                var clean = args.mapValues { ($0 as? String) ?? String(describing: $0) }
+                // Outil à un seul argument requis, appelé avec un seul argument mal nommé : on le remet sous le bon nom.
+                if let tool = (call["tool"] as? String).flatMap({ CoreToolID(rawValue: $0) }) {
+                    let spec = ToolRegistry.definition(tool)
+                    if spec.required.count == 1, clean.count == 1, let only = clean.first, !(spec.required + spec.optional).contains(only.key) {
+                        clean = [spec.required[0]: only.value]
+                    }
+                }
+                call["arguments"] = clean
+            }
+            else if call["arguments"] == nil { call["arguments"] = [String: String]() }
+            o["toolCall"] = call
+        }
+        if let plan = o["plan"] as? [[String: Any]] {
+            var earlier: Set<String> = []
+            o["plan"] = plan.enumerated().map { index, step -> [String: Any] in
+                var s = step
+                if s["id"] == nil { s["id"] = String(index + 1) }
+                if let id = s["id"], !(id is String) { s["id"] = String(describing: id) }
+                let deps = (s["dependsOn"] as? [Any]) ?? []
+                // Une dépendance qui ne désigne pas une étape précédente est ignorée (un plan reste valide, jamais cyclique).
+                s["dependsOn"] = deps.compactMap { ($0 as? [String: Any])?["id"].map { String(describing: $0) } ?? ($0 as? String) ?? ($0 as? Int).map(String.init) }.filter { earlier.contains($0) }
+                if let id = s["id"] as? String { earlier.insert(id) }
+                return s
+            }
+        }
+        return o
+    }
+
     public static func parse(_ text: String, missionID: String) throws -> Self {
-        guard text.utf8.count <= 48_000, let data = text.data(using: .utf8),
-              let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              Set(object.keys).isSubset(of: ["schemaVersion", "missionID", "action", "text", "plan", "toolCall", "sourceIDs"]) else { throw CoreError.invalid("Réponse JSON ou schéma invalide.") }
+        guard text.utf8.count <= 48_000, let raw = text.data(using: .utf8),
+              let original = try JSONSerialization.jsonObject(with: raw) as? [String: Any],
+              Set(original.keys).isSubset(of: ["schemaVersion", "missionID", "action", "text", "plan", "toolCall", "sourceIDs", "tool", "arguments", "reason", "expectedResult"]) else { throw CoreError.invalid("Réponse JSON ou schéma invalide.") }
+        let object = try normalize(original, missionID: missionID)
+        guard let data = try? JSONSerialization.data(withJSONObject: object) else { throw CoreError.invalid("Réponse JSON ou schéma invalide.") }
         if let call = object["toolCall"] as? [String: Any], !Set(call.keys).isSubset(of: ["id", "tool", "arguments", "reason", "expectedResult", "missionID"]) { throw CoreError.invalid("Champ d'outil inconnu.") }
         if let plan = object["plan"] as? [[String: Any]], plan.contains(where: { !Set($0.keys).isSubset(of: ["id", "title", "dependsOn"]) }) { throw CoreError.invalid("Champ de plan inconnu.") }
         let decision = try JSONDecoder().decode(Self.self, from: data)

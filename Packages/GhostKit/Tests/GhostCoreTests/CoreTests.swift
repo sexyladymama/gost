@@ -49,7 +49,7 @@ private struct FakeWeb: WebSearcher {
 
 /// Décision JSON pour la mission de la requête (l'identifiant est lu dans le prompt, comme le ferait un vrai modèle).
 private func decide(_ request: ModelRequest, _ action: String, text: String? = nil, tool: String? = nil, args: [String: String] = [:], reason: String = "nécessaire", plan: [[String: Any]]? = nil) -> String {
-    let id = request.system.range(of: #""missionID":"([^"]+)""#, options: .regularExpression).map { String(request.system[$0]).dropFirst(13).dropLast() } ?? ""
+    let id = request.system.range(of: #"Mission : ([0-9a-fA-F\-]+)\."#, options: .regularExpression).map { String(request.system[$0]).dropFirst(10).dropLast() } ?? ""
     var o: [String: Any] = ["schemaVersion": 1, "missionID": String(id), "action": action]
     if let text { o["text"] = text }
     if let plan { o["plan"] = plan }
@@ -418,5 +418,32 @@ final class AgentSafetyTests: XCTestCase {
         let after = try await env.context.search("briefings")
         let saved = try XCTUnwrap(after.first { $0.kind == .preference })
         XCTAssertEqual(saved.status, .confirmed); XCTAssertTrue(saved.provenance.contains { $0.isUserProvided })
+    }
+}
+
+// MARK: - Essais réels (GHOST_LIVE=1) : modèle Apple sur ce Mac
+
+final class LiveCoreTests: XCTestCase {
+    func testRealOnDeviceModelRunsTheBriefingScenario() async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["GHOST_LIVE"] == "1", "GHOST_LIVE=1 requis")
+        let status = await OnDeviceModelProvider().availability()
+        try XCTSkipIf(status != nil, "modèle Apple indisponible : \(status ?? "")")
+        let env = try await Env.make { _ in "" }
+        let gateway = ModelGateway(providers: [OnDeviceModelProvider()], policy: GatewayPolicy(timeout: 90))
+        let core = CoreCoordinator(profile: GhostProfile(id: "live", baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("ghost-live-\(UUID())")),
+                                   brain: env.brain, context: env.context, trust: env.trust, gateway: gateway, mind: env.mind,
+                                   documents: FolderDocumentStore(writer: FolderOutputWriter(folder: env.folder)), persistent: false, clock: { now })
+        try await env.seedClient()
+        let id = try await core.submit(objective: "Prépare un briefing pour ma réunion de demain avec l'Atelier Lune : retrouve ce que l'on sait d'eux, lis mes notes et crée le document.", scope: .professional)
+        await core.wait(id)
+        let s = try await fetch(core, id)
+        print("LIVE phase=\(s.phase) itérations=\(s.iterations) outils=\(s.receipts.map { $0.call.tool.rawValue + ":" + $0.status }) fournisseur=\(s.provider ?? "-")/\(s.model ?? "-") simulé=\(s.isSimulated)")
+        print("LIVE erreur=\(s.error ?? "-") réponse=\(s.answer ?? "-")")
+        print("LIVE taille du dernier prompt=\(s.reservedTokens) jetons estimés")
+        print("LIVE question=\(s.clarification ?? "-")")
+        for h in s.history { print("LIVE journal: \(h.message)") }
+        print("LIVE fichiers=\((try? FileManager.default.contentsOfDirectory(atPath: env.folder.path)) ?? [])")
+        for r in s.receipts { print("LIVE reçu \(r.call.tool.rawValue)(\(r.call.arguments.keys.sorted())) → \(r.status): \(r.content.prefix(160))") }
+        XCTAssertFalse(s.isSimulated)
     }
 }

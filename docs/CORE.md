@@ -54,3 +54,53 @@ Sources primaires consultées pour la compatibilité : [API et modèles Anthropi
 `OnDeviceModelProvider` adapte FoundationModels à `ModelGateway`. Mind peut utiliser les adaptateurs local/externe de cette même passerelle ; le raccordement dans la composition sera effectué avec Core. Les limites de taille, l'annulation avant repli et un délai qui n'attend pas un SDK non coopératif sont testés. La réponse tardive d'un fournisseur est abandonnée.
 
 Validation de cette phase : 17 tests de passerelle exécutés sans échec (`swift test --package-path Packages/GhostKit --filter 'SharedGatewayTests|ModelGatewayTests'`). Cela ne valide pas encore un appel au modèle réel.
+
+## Phases C à F : GHOST CORE (6 novembre 2026)
+
+### Ce qui existe
+
+| Composant | Fichier | Rôle |
+|---|---|---|
+| Protocole de décision | `GhostCore/AgentModel.swift` | `AgentDecision` versionné ; décodage strict (champ, outil, mission, taille) après une réparation déterministe des écarts bénins d'un petit modèle |
+| Registre d'outils | `GhostCore/ToolRegistry.swift` | 16 outils déclarés ; 3 explicitement **indisponibles** (présentation, tableur via Core, rien de simulé) |
+| Boîte à outils | `GhostCore/CoreTools.swift` | exécute les outils réels : mémoire, fichiers autorisés, création vérifiée par relecture, brouillon (Mind), recherche web / lieux, visuel SVG validé, propositions de préférence |
+| Coordinateur et boucle | `GhostCore/CoreCoordinator.swift` | boucle bornée, approbations, reprise, pause, annulation, suppression |
+| Checkpoints | `GhostCore/AgentStore.swift` | `core.json` (exécution seulement ; la mémoire reste dans GhostContext, l'identité de mission dans Brain) |
+| Interface | `GhostShell/UI/ObjectivesView.swift`, `GhostCore/CoreCenter.swift` | saisie d'un objectif, plan, reçus d'outils, accord, question, résultat à relire, état des IA |
+| Brain | `BrainEngine.submitObjective / recordCoreActivity / acceptCoreResult` | **une seule identité de mission** : un objectif crée la mission canonique ; une réponse du modèle ne la termine jamais, seul « Je l'ai relu » le fait |
+| Mind | `MindEngine.prepareDraft` | brouillon pour Core, jamais envoyé ; l'envoi reste `send(_:confirmedByUser:)` |
+
+### La boucle
+
+objectif → mission Brain → (contexte sélectif de **cette** mission + outils réellement disponibles + historique des appels) → décision JSON → validation → autorisation → outil → résultat renvoyé au modèle (comme **donnée**) → … → réponse finale à relire.
+Limites : 16 itérations, 10 outils, 80 000 jetons, 2 $ (modèles externes seulement), 180 s, 3 appels identiques = boucle, 1 relance de protocole. Un modèle local ne consomme pas le budget financier.
+
+### Sécurité (outre la confiance existante)
+
+- L'outil n'est proposé au modèle que s'il est disponible **et** autorisé (recherche en ligne, dossier choisi) ; l'appel est de nouveau refusé à l'exécution.
+- Envoi : approbation liée à l'**empreinte de l'action** (outil, mission, arguments **et** contenu exact du brouillon) ; modifier le brouillon, un argument ou rejouer l'accord le rend invalide ; jamais deux envois.
+- Fichiers : un seul dossier, aucun lien symbolique suivi, aucun chemin hors du dossier, jamais d'écrasement, relecture réelle après création.
+- Reprise : une lecture interrompue est refaite ; une écriture interrompue (effet inconnu) est **bloquée**, jamais rejouée.
+- Pause, annulation et suppression : une réponse tardive du modèle est ignorée (testé) ; on ne ressuscite ni une mission annulée ni une mémoire effacée.
+- Mémoire : le modèle **propose**, une règle déterministe filtre les sujets sensibles, l'utilisateur confirme avant qu'une préférence entre dans GhostContext (confirmée, fournie par l'utilisateur).
+- Un document, un site ou un fichier lus peuvent contenir des consignes : ce sont des données ; testé avec un fichier piégé (rien n'est envoyé).
+
+### Validation : ce qui est prouvé et ce qui ne l'est pas
+
+| Niveau | Résultat |
+|---|---|
+| Tests unitaires et scénarios avec un fournisseur **simulé** (20 tests Core) | briefing dynamique (mémoire → documents → création → vérification), adaptation à un résultat vide, question de clarification puis reprise, accord pour un envoi, refus, reprise après redémarrage, boucles, limites, annulation tardive, pause, suppression, recherche refusée, fichier piégé, chemins et liens, propositions de mémoire |
+| Modèle **réel** Apple (sur ce Mac, `GHOST_LIVE=1`) | la **structure** est garantie (génération guidée Apple) ; `search_memory` s'est exécuté réellement ; mais le modèle de ~3 milliards de paramètres **ne mène pas encore un scénario complet** : il oublie des étapes, se trompe d'arguments, pose des questions inutiles. Résultat variable d'un essai à l'autre. |
+| Modèle externe (Anthropic) | **jamais testé** : aucune clé n'est configurée ; aucun appel réel n'a été fait |
+| Interface | compile ; **non vérifiée à la main** |
+| Services réels (Apple Plans, DuckDuckGo) | vérifiés pendant la Mission 007, pas via Core |
+
+Conséquence honnête : l'architecture d'agent est en place et sûre, mais **la qualité du raisonnement dépend du modèle**. Pour des missions complexes, un modèle externe plus capable est nécessaire ; il passera par la même passerelle avec masquage des adresses e-mail et uniquement si l'utilisateur l'active.
+
+### Limites connues
+
+- Tableur et présentation : indisponibles via Core (le scénario Excel d'Autonomy reste lancé depuis sa propre mission).
+- OpenAI : non implémenté (la passerelle accepte un fournisseur de plus sans changer Core).
+- La confidentialité externe masque les adresses e-mail, pas tous les noms.
+- Pas d'apprentissage automatique depuis les corrections : seules les préférences proposées par le modèle puis confirmées sont retenues.
+- Pas de déclenchement proactif d'une session Core à partir d'un événement : Brain crée toujours les missions proactives, Core ne démarre que sur un objectif saisi.

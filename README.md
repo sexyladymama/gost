@@ -19,6 +19,7 @@ e-mail, ne modifie ni ne supprime aucun fichier et n'exécute aucune tâche.
 - [Mission 002.1](docs/MISSION_002_1.md) : corrections de stockage, reprise après panne et validation.
 - [GHOST CONTEXT (Mission 003)](docs/CONTEXT.md) : mémoire et compréhension contextuelle, cloisonnement, preuves, corrections.
 - [GHOST BRAIN (Mission 004)](docs/BRAIN.md) : décisions, missions, priorités, plans ; [évaluation chiffrée](docs/BRAIN_EVALUATION.md).
+- [GHOST CORE (Mission 008)](docs/CORE.md) : un objectif en langage naturel, une boucle d'agent bornée, des outils réels, un accord lié à l'action exacte.
 - [GHOST MIND (Mission 007)](docs/MIND.md) : GHOST comprend la demande et fait le travail : mails, recherche de lieux, logos et documents.
 - [GHOST VISION (Mission 006)](docs/VISION.md) : lecture de l'écran en local, vie privée, rendez-vous ajoutés à l'agenda.
 - [GHOST AUTONOMY (Mission 005)](docs/AUTONOMY.md) : exécution locale d'un scénario Excel de bout en bout, Trust, vérification, reprise.

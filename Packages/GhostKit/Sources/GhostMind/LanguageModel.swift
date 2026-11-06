@@ -62,6 +62,63 @@ public struct OnDeviceLanguageModel: LanguageModel {
     }
 }
 
+#if canImport(FoundationModels)
+/// Génération GUIDÉE (Apple) : la structure d'une décision d'agent est garantie par le système, pas par la bonne volonté du petit modèle.
+@available(macOS 26.0, *)
+@Generable
+struct GuidedAgentStep {
+    @Guide(description: "Type d'étape.", .anyOf(["tool_call", "create_plan", "clarification_required", "final_response", "blocked"]))
+    var action: String
+    @Guide(description: "La question posée, le résultat final ou la raison du blocage. Vide pour tool_call et create_plan.")
+    var text: String
+    @Guide(description: "Nom exact de l'outil à appeler quand action vaut tool_call ; vide sinon.")
+    var tool: String
+    @Guide(description: "Arguments de l'outil (nom et valeur texte).")
+    var arguments: [GuidedArgument]
+    @Guide(description: "Pourquoi cet outil, en une phrase.")
+    var reason: String
+    @Guide(description: "Étapes du plan quand action vaut create_plan, dans l'ordre ; vide sinon.")
+    var plan: [String]
+}
+@available(macOS 26.0, *)
+@Generable
+struct GuidedArgument {
+    var name: String
+    var value: String
+}
+
+@available(macOS 26.0, *)
+extension GuidedAgentStep {
+    /// Même JSON que celui que le coordinateur valide strictement.
+    var json: String {
+        var object: [String: Any] = ["action": action]
+        if !text.isEmpty { object["text"] = text }
+        if action == "tool_call" {
+            var args: [String: String] = [:]
+            for pair in arguments where !pair.name.isEmpty { args[pair.name] = pair.value }
+            object["toolCall"] = ["tool": tool, "arguments": args, "reason": reason.isEmpty ? "Étape de la mission." : reason] as [String: Any]
+        }
+        if action == "create_plan" {
+            object["plan"] = plan.enumerated().map { i, title in ["id": String(i + 1), "title": title, "dependsOn": i == 0 ? [] : [String(i)]] as [String: Any] }
+        }
+        return String(data: (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8), encoding: .utf8) ?? "{}"
+    }
+}
+#endif
+
+extension OnDeviceLanguageModel {
+    /// Décision d'agent à structure garantie (voir `GuidedAgentStep`).
+    func generateAgentStep(system: String, prompt: String) async throws -> String {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            let session = LanguageModelSession(instructions: system)
+            return try await session.respond(to: prompt, generating: GuidedAgentStep.self).content.json
+        }
+        #endif
+        throw MindError.invalid("Modèle intégré indisponible.")
+    }
+}
+
 /// Modèle externe optionnel (passerelle du Brain : Anthropic, clé de l'utilisateur, consentement requis).
 public struct GatewayLanguageModel: LanguageModel {
     private let gateway: ModelGateway
@@ -103,9 +160,12 @@ public struct OnDeviceModelProvider: ModelProvider {
     }
     public func complete(_ request: ModelRequest) async throws -> ModelResponse {
         if let reason = await availability() { throw ModelError.providerFailed(reason) }
-        let text = try await OnDeviceLanguageModel().generate(system: request.system, prompt: request.user)
+        let local = OnDeviceLanguageModel()
+        let text = request.task == .agentStep
+            ? try await local.generateAgentStep(system: request.system, prompt: request.user)
+            : try await local.generate(system: request.system, prompt: request.user)
         return ModelResponse(text: text, provider: id, model: model,
-                             usage: ModelUsage(inputTokens: request.user.utf8.count + request.system.utf8.count, outputTokens: text.utf8.count), isSimulated: false)
+                             usage: ModelUsage(inputTokens: (request.user.utf8.count + request.system.utf8.count) / 3, outputTokens: text.utf8.count / 3), isSimulated: false)
     }
 }
 
