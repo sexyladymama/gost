@@ -57,7 +57,10 @@ final class PerceptionController {
     @ObservationIgnored private let gateway: ModelGateway
     let core: CoreCenter
     /// Confidentialité des objectifs : modèle local uniquement, sauf choix explicite de l'utilisateur.
-    var corePrivacy: ModelPrivacy = .localOnly
+    var corePrivacy: ModelPrivacy = .localOnly {
+        didSet { defaults.set(corePrivacy.rawValue, forKey: "core.privacy") }
+    }
+    private(set) var connectionTest: String?
     private(set) var aiStatus: [String] = []
 
     private(set) var emailMode: EmailMode
@@ -121,6 +124,7 @@ final class PerceptionController {
         core = CoreCenter(engine: CoreCoordinator(profile: profile, brain: brain.engine, context: context.engine, trust: system.trust, gateway: gateway,
                                                   mind: mind.engine, web: DuckDuckGoSearcher(), places: MapKitPlaceSearcher(),
                                                   documents: FolderDocumentStore(writer: outputWriter), persistent: persistent))
+        corePrivacy = ModelPrivacy(rawValue: defaults.string(forKey: "core.privacy") ?? "") ?? .localOnly
         screenEnabled = defaults.bool(forKey: Keys.screenEnabled)
         calendarAutoAdd = defaults.bool(forKey: Keys.calendarAutoAdd)
         onboardingDone = defaults.bool(forKey: Keys.onboardingDone)
@@ -554,6 +558,17 @@ final class PerceptionController {
         try? secrets.delete(AnthropicProvider.secretKey)
         hasModelKey = false
         await setExternalModel(enabled: false)
+    }
+
+    /// Vrai appel de test (déclenché par l'utilisateur) : un modèle, une question triviale, aucune donnée personnelle.
+    func testModelConnection(external: Bool) async {
+        connectionTest = "Test en cours…"
+        do {
+            let response = try await gateway.complete(ModelRequest(task: .connectionTest, system: "Réponds uniquement par le mot OK.", user: "Test de connexion.",
+                                                                   maxOutputTokens: 16, privacy: external ? .externalOnly : .localOnly))
+            connectionTest = "Connexion réussie : \(response.provider) / \(response.model)\(response.isSimulated ? " (SIMULÉ)" : "") — \(response.usage.inputTokens + response.usage.outputTokens) jetons."
+        } catch { connectionTest = "Échec : \(error.localizedDescription)" }
+        await refreshAIStatus()
     }
 
     /// État réel des fournisseurs d'IA (jamais un simulé présenté comme réel).

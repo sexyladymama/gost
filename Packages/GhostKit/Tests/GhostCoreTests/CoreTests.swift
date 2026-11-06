@@ -447,3 +447,29 @@ final class LiveCoreTests: XCTestCase {
         XCTAssertFalse(s.isSimulated)
     }
 }
+
+/// Modèle externe réel : s'exécute seulement avec GHOST_LIVE=1 ET ANTHROPIC_API_KEY dans l'environnement (jamais écrit dans un fichier ni un journal).
+final class LiveExternalCoreTests: XCTestCase {
+    func testRealAnthropicModelRunsTheBriefingScenario() async throws {
+        let env = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(env["GHOST_LIVE"] == "1", "GHOST_LIVE=1 requis")
+        let key = try XCTUnwrap(env["ANTHROPIC_API_KEY"].flatMap { $0.isEmpty ? nil : $0 }, "ANTHROPIC_API_KEY absent")
+        let setup = try await Env.make { _ in "" }
+        let system = PerceptionSystem(profile: GhostProfile(id: "live-ext", baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("ghost-live-ext-\(UUID())")), persistent: false, tick: nil)
+        let secrets = InMemorySecretStore()
+        try secrets.save(Data(key.utf8), for: AnthropicProvider.secretKey)
+        await setup.trust.grant(PerceptionSystem.brainSourceID, permission: .callExternalModel, scope: "anthropic")
+        await system.trust.grant(PerceptionSystem.brainSourceID, permission: .callExternalModel, scope: "anthropic")
+        let gateway = ModelGateway(providers: [AnthropicProvider(http: system.http, secrets: secrets)], policy: GatewayPolicy(enabled: true, timeout: 60))
+        let core = CoreCoordinator(profile: GhostProfile(id: "live-ext", baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("ghost-live-ext2-\(UUID())")),
+                                   brain: setup.brain, context: setup.context, trust: setup.trust, gateway: gateway, mind: setup.mind,
+                                   documents: FolderDocumentStore(writer: FolderOutputWriter(folder: setup.folder)), persistent: false, clock: { now })
+        try await setup.seedClient()
+        let id = try await core.submit(objective: "Prépare un briefing pour ma réunion de demain avec l'Atelier Lune : retrouve ce que l'on sait d'eux, lis mes notes et crée le document.", scope: .professional, privacy: .externalOnly)
+        await core.wait(id)
+        let s = try await fetch(core, id)
+        print("LIVE-EXT phase=\(s.phase) itérations=\(s.iterations) outils=\(s.receipts.map { $0.call.tool.rawValue + ":" + $0.status }) fournisseur=\(s.provider ?? "-")/\(s.model ?? "-") erreur=\(s.error ?? "-")")
+        for h in s.history { print("LIVE-EXT journal: \(h.message.prefix(200))") }
+        XCTAssertFalse(s.isSimulated)
+    }
+}

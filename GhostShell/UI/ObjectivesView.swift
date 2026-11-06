@@ -44,9 +44,26 @@ struct ObjectivesView: View {
     }
 
     private var aiStatus: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        @Bindable var perception = perception
+        return VStack(alignment: .leading, spacing: 6) {
             ForEach(perception.aiStatus, id: \.self) { Label($0, systemImage: "cpu").font(.caption).foregroundStyle(.secondary) }
-            Text(perception.corePrivacy == .localOnly ? "Les objectifs restent sur ce Mac (modèle local uniquement)." : "Un modèle externe peut être utilisé ; adresses e-mail masquées avant envoi.")
+            Picker("Modèle utilisé pour les objectifs", selection: $perception.corePrivacy) {
+                Text("Local uniquement").tag(ModelPrivacy.localOnly)
+                Text("Local, puis externe").tag(ModelPrivacy.externalAllowed)
+                Text("Externe uniquement").tag(ModelPrivacy.externalOnly)
+            }
+            .pickerStyle(.segmented)
+            if perception.corePrivacy != .localOnly && !perception.externalModelEnabled {
+                Label("Le modèle externe n'est pas activé : enregistrez une clé et activez-le dans Confidentialité. Sans cela, aucun objectif ne peut utiliser un modèle externe.", systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+            HStack {
+                Button("Tester le modèle local") { Task { await perception.testModelConnection(external: false) } }.buttonStyle(GhostButtonStyle())
+                Button("Tester le modèle externe") { Task { await perception.testModelConnection(external: true) } }.buttonStyle(GhostButtonStyle())
+                    .disabled(!perception.externalModelEnabled)
+                if let result = perception.connectionTest { Text(result).font(.caption).foregroundStyle(.secondary) }
+            }
+            Text(perception.corePrivacy == .localOnly ? "Les objectifs restent sur ce Mac." : "Avec un modèle externe, l'objectif, les extraits de mémoire pertinents et les résultats d'outils sont envoyés ; les adresses e-mail sont masquées avant l'envoi.")
                 .font(.caption2).foregroundStyle(.tertiary)
         }
     }
