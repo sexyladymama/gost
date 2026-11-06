@@ -65,15 +65,47 @@ public struct OnDeviceLanguageModel: LanguageModel {
 /// Modèle externe optionnel (passerelle du Brain : Anthropic, clé de l'utilisateur, consentement requis).
 public struct GatewayLanguageModel: LanguageModel {
     private let gateway: ModelGateway
-    public init(gateway: ModelGateway) { self.gateway = gateway }
-    public var name: String { "Modèle externe (avec masquage des noms)" }
-    public var isLocal: Bool { false }
-    public var isSimulated: Bool { false }
+    private let localOnly: Bool
+    private let identity = GatewayModelIdentity()
+    public init(gateway: ModelGateway, localOnly: Bool = false) { self.gateway = gateway; self.localOnly = localOnly }
+    public var name: String { identity.snapshot.name ?? (localOnly ? "Modèle local via GHOST" : "Modèle externe via GHOST") }
+    public var isLocal: Bool { localOnly }
+    public var isSimulated: Bool { identity.snapshot.simulated }
     public func availability() async -> LanguageModelAvailability {
-        await gateway.isAvailable ? .available : .unavailable("Modèle externe désactivé ou sans clé (réglages du cerveau).")
+        let candidates = await gateway.statuses().filter { $0.isLocal == localOnly }
+        if candidates.contains(where: \.available) { return .available }
+        return .unavailable(candidates.first?.reason ?? "Aucun modèle compatible disponible.")
     }
     public func generate(system: String, prompt: String) async throws -> String {
-        try await gateway.complete(ModelRequest(task: .generate, system: system, user: prompt, maxOutputTokens: 900)).text
+        let response = try await gateway.complete(ModelRequest(task: .generate, system: system, user: prompt, maxOutputTokens: 1_800,
+                                                              privacy: localOnly ? .localOnly : .externalOnly))
+        identity.set(response.provider + " / " + response.model, simulated: response.isSimulated)
+        return response.text
+    }
+}
+private final class GatewayModelIdentity: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: (name: String?, simulated: Bool) = (nil, false)
+    var snapshot: (name: String?, simulated: Bool) { lock.withLock { value } }
+    func set(_ name: String, simulated: Bool) { lock.withLock { value = (name, simulated) } }
+}
+
+/// Adaptateur du modèle Apple existant vers l'unique passerelle Brain/Mind/Core.
+public struct OnDeviceModelProvider: ModelProvider {
+    public init() {}
+    public var id: String { "apple" }
+    public var model: String { "system-on-device" }
+    public var isLocal: Bool { true }
+    public var isSimulated: Bool { false }
+    public func availability() async -> String? {
+        if case .unavailable(let reason) = await OnDeviceLanguageModel().availability() { return reason }
+        return nil
+    }
+    public func complete(_ request: ModelRequest) async throws -> ModelResponse {
+        if let reason = await availability() { throw ModelError.providerFailed(reason) }
+        let text = try await OnDeviceLanguageModel().generate(system: request.system, prompt: request.user)
+        return ModelResponse(text: text, provider: id, model: model,
+                             usage: ModelUsage(inputTokens: request.user.utf8.count + request.system.utf8.count, outputTokens: text.utf8.count), isSimulated: false)
     }
 }
 

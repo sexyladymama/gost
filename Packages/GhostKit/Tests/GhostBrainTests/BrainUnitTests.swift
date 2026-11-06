@@ -674,3 +674,57 @@ final class BrainCompletionEvidenceAuditTests: XCTestCase {
         XCTAssertEqual(decisions.last?.kind, .updateMission)
     }
 }
+
+private struct CoreGatewayTestProvider: ModelProvider {
+    var id: String; var model = "test"; var isSimulated = true; var isLocal = false
+    var capabilities: Set<ModelCapability> = [.text, .structuredProtocol, .multiTurnProtocol]
+    var unavailable: String?
+    var action: @Sendable () async throws -> String = { "ok" }
+    func availability() async -> String? { unavailable }
+    func complete(_ request: ModelRequest) async throws -> ModelResponse {
+        ModelResponse(text: try await action(), provider: id, model: model, usage: ModelUsage(inputTokens: 1, outputTokens: 1), isSimulated: true)
+    }
+}
+final class SharedGatewayTests: XCTestCase {
+    func testLocalModelRemainsAvailableWithoutExternalConsent() async throws {
+        let local = CoreGatewayTestProvider(id: "local", isLocal: true)
+        let remote = CoreGatewayTestProvider(id: "remote", action: { XCTFail("Aucun appel externe"); return "bad" })
+        let gateway = ModelGateway(providers: [remote, local])
+        let response = try await gateway.complete(ModelRequest(task: .agentStep, system: "", user: "objectif", privacy: .localOnly))
+        XCTAssertEqual(response.provider, "local"); XCTAssertTrue(response.isSimulated)
+    }
+    func testCapabilitiesAndPrivacyFilterProvidersBeforeCalling() async throws {
+        let unavailable = CoreGatewayTestProvider(id: "off", isLocal: true, unavailable: "modèle absent")
+        let textOnly = CoreGatewayTestProvider(id: "text", isLocal: true, capabilities: [.text], action: { XCTFail(); return "bad" })
+        let remote = CoreGatewayTestProvider(id: "remote", action: { XCTFail("Local only"); return "bad" })
+        let gateway = ModelGateway(providers: [unavailable, textOnly, remote], policy: GatewayPolicy(enabled: true))
+        do { _ = try await gateway.complete(ModelRequest(task: .agentStep, system: "", user: "x", privacy: .localOnly, requiredCapabilities: [.structuredProtocol])); XCTFail() } catch {}
+        let statuses = await gateway.statuses()
+        XCTAssertEqual(statuses.first?.reason, "modèle absent")
+    }
+    func testTimeoutDoesNotWaitForAnUncooperativeProvider() async throws {
+        let slow = CoreGatewayTestProvider(id: "slow", isLocal: true, action: {
+            await withCheckedContinuation { continuation in DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) { continuation.resume() } }
+            return "late"
+        })
+        let fast = CoreGatewayTestProvider(id: "fast", isLocal: true)
+        let gateway = ModelGateway(providers: [slow, fast], policy: GatewayPolicy(timeout: 0.03))
+        let start = ContinuousClock.now
+        let response = try await gateway.complete(ModelRequest(task: .agentStep, system: "", user: "x"))
+        XCTAssertEqual(response.provider, "fast"); XCTAssertLessThan(start.duration(to: .now), .milliseconds(400))
+    }
+    func testCancellationNeverTriggersFallback() async throws {
+        let slow = CoreGatewayTestProvider(id: "slow", isLocal: true, action: { try await Task.sleep(for: .seconds(2)); return "late" })
+        let next = CoreGatewayTestProvider(id: "next", isLocal: true, action: { XCTFail("Pas de repli après annulation"); return "bad" })
+        let gateway = ModelGateway(providers: [slow, next])
+        let task = Task { try await gateway.complete(ModelRequest(task: .agentStep, system: "", user: "x")) }
+        try await Task.sleep(for: .milliseconds(20)); task.cancel()
+        do { _ = try await task.value; XCTFail() } catch is CancellationError {}
+    }
+    func testOversizedRequestsAndResponsesAreRefused() async throws {
+        let p = CoreGatewayTestProvider(id: "huge", isLocal: true, action: { String(repeating: "x", count: 64_001) })
+        let gateway = ModelGateway(providers: [p])
+        do { _ = try await gateway.complete(ModelRequest(task: .agentStep, system: "", user: String(repeating: "x", count: 80_001))); XCTFail() } catch {}
+        do { _ = try await gateway.complete(ModelRequest(task: .agentStep, system: "", user: "x")); XCTFail() } catch {}
+    }
+}

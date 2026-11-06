@@ -3,7 +3,14 @@ import GhostPerception
 
 // MARK: - Contrat commun
 
-public enum ModelTask: String, Codable, Sendable { case refineAmbiguity, generate }
+public enum ModelTask: String, Codable, Sendable { case refineAmbiguity, generate, agentStep, connectionTest }
+
+public enum ModelCapability: String, Codable, Sendable, Hashable { case text, structuredProtocol, multiTurnProtocol }
+public enum ModelPrivacy: String, Codable, Sendable { case localOnly, externalAllowed, externalOnly }
+public struct ModelProviderStatus: Sendable {
+    public var id: String; public var model: String; public var isLocal: Bool; public var isSimulated: Bool
+    public var available: Bool; public var reason: String?; public var capabilities: Set<ModelCapability>
+}
 
 public struct ModelRequest: Sendable {
     public var task: ModelTask
@@ -11,9 +18,13 @@ public struct ModelRequest: Sendable {
     public var user: String
     public var maxOutputTokens: Int
     public var requestID: UUID
-    public init(task: ModelTask, system: String, user: String, maxOutputTokens: Int = 400, requestID: UUID = UUID()) {
+    public var privacy: ModelPrivacy
+    public var requiredCapabilities: Set<ModelCapability>
+    public init(task: ModelTask, system: String, user: String, maxOutputTokens: Int = 400, requestID: UUID = UUID(),
+                privacy: ModelPrivacy = .externalAllowed, requiredCapabilities: Set<ModelCapability> = [.text]) {
         self.task = task; self.system = system; self.user = user
         self.maxOutputTokens = maxOutputTokens; self.requestID = requestID
+        self.privacy = privacy; self.requiredCapabilities = requiredCapabilities
     }
 }
 
@@ -54,7 +65,16 @@ public protocol ModelProvider: Sendable {
     var model: String { get }
     /// `true` si les réponses sont produites localement par des règles (jamais par un vrai modèle).
     var isSimulated: Bool { get }
+    var isLocal: Bool { get }
+    var capabilities: Set<ModelCapability> { get }
+    func availability() async -> String?
     func complete(_ request: ModelRequest) async throws -> ModelResponse
+}
+public extension ModelProvider {
+    var isLocal: Bool { false }
+    // Compatible via JSON/text supplied to the host, not native provider tool calling.
+    var capabilities: Set<ModelCapability> { [.text, .structuredProtocol, .multiTurnProtocol] }
+    func availability() async -> String? { nil }
 }
 
 public struct GatewayPolicy: Sendable {
@@ -62,9 +82,13 @@ public struct GatewayPolicy: Sendable {
     public var timeout: TimeInterval
     public var maxCallsPerDay: Int
     public var maxTokensPerDay: Int
-    public init(enabled: Bool = false, timeout: TimeInterval = 20, maxCallsPerDay: Int = 200, maxTokensPerDay: Int = 200_000) {
+    public var allowLocal: Bool
+    public var preferredProvider: String?
+    public init(enabled: Bool = false, timeout: TimeInterval = 20, maxCallsPerDay: Int = 200, maxTokensPerDay: Int = 200_000,
+                allowLocal: Bool = true, preferredProvider: String? = nil) {
         self.enabled = enabled; self.timeout = timeout
         self.maxCallsPerDay = maxCallsPerDay; self.maxTokensPerDay = maxTokensPerDay
+        self.allowLocal = allowLocal; self.preferredProvider = preferredProvider
     }
 }
 
@@ -121,19 +145,45 @@ public actor ModelGateway {
 
     public func setPolicy(_ policy: GatewayPolicy) { self.policy = policy }
     public func setProviders(_ providers: [ModelProvider]) { self.providers = providers }
-    public var isAvailable: Bool { policy.enabled && !providers.isEmpty }
+    public var isAvailable: Bool { providers.contains { $0.isLocal ? policy.allowLocal : policy.enabled } }
+    public func statuses() async -> [ModelProviderStatus] {
+        var result: [ModelProviderStatus] = []
+        for provider in providers {
+            let enabled = provider.isLocal ? policy.allowLocal : policy.enabled
+            let unavailable = enabled ? await provider.availability() : "Désactivé par l'utilisateur."
+            result.append(ModelProviderStatus(id: provider.id, model: provider.model, isLocal: provider.isLocal, isSimulated: provider.isSimulated,
+                available: enabled && unavailable == nil, reason: unavailable, capabilities: provider.capabilities))
+        }
+        return result
+    }
+    public func usageSummary() -> (calls: Int, tokens: Int) { rollDay(); return (callsToday, tokensToday) }
     public var providerSummary: String { providers.map { $0.id + ($0.isSimulated ? " (simulé)" : "") }.joined(separator: " → ") }
 
     public func complete(_ request: ModelRequest) async throws -> ModelResponse {
-        guard policy.enabled else { throw ModelError.disabled }
+        try Task.checkCancellation()
+        guard request.user.utf8.count + request.system.utf8.count <= 80_000, (1...8_000).contains(request.maxOutputTokens) else {
+            throw ModelError.providerFailed("requête trop volumineuse ou budget de sortie invalide")
+        }
+        guard isAvailable else { throw ModelError.disabled }
         if let budgetFailure { throw budgetFailure }
         guard !providers.isEmpty else { throw ModelError.noProvider }
         rollDay()
         guard callsToday < policy.maxCallsPerDay else { throw ModelError.budgetExceeded("appels quotidiens") }
         guard tokensToday < policy.maxTokensPerDay else { throw ModelError.budgetExceeded("jetons quotidiens") }
         var lastError: Error = ModelError.noProvider
-        for provider in providers {
-            guard policy.enabled else { throw ModelError.disabled }
+        let ordered = providers.sorted { a, b in
+            let aRank = a.id == policy.preferredProvider ? -1 : (a.isLocal ? 0 : 1)
+            let bRank = b.id == policy.preferredProvider ? -1 : (b.isLocal ? 0 : 1)
+            return aRank < bRank
+        }
+        for provider in ordered {
+            try Task.checkCancellation()
+            guard provider.isLocal ? policy.allowLocal : policy.enabled else { continue }
+            guard (request.privacy != .localOnly || provider.isLocal), (request.privacy != .externalOnly || !provider.isLocal),
+                  request.requiredCapabilities.isSubset(of: provider.capabilities) else { continue }
+            if await provider.availability() != nil { continue }
+            try Task.checkCancellation()
+            guard provider.isLocal ? policy.allowLocal : policy.enabled else { continue }
             rollDay()
             guard callsToday < policy.maxCallsPerDay else { throw ModelError.budgetExceeded("appels quotidiens") }
             guard tokensToday < policy.maxTokensPerDay else { throw ModelError.budgetExceeded("jetons quotidiens") }
@@ -145,13 +195,19 @@ public actor ModelGateway {
             let start = clock()
             do {
                 let response = try await withTimeout(policy.timeout) { try await provider.complete(request) }
+                try Task.checkCancellation()
+                guard response.text.utf8.count <= 64_000, response.provider == provider.id,
+                      response.model == provider.model, response.isSimulated == provider.isSimulated else {
+                    throw ModelError.providerFailed("réponse trop volumineuse ou identité incohérente")
+                }
                 let usage = Self.saturatingAdd(max(0, response.usage.inputTokens), max(0, response.usage.outputTokens))
                 tokensToday = Self.saturatingAdd(tokensToday, usage)
                 try persistBudget()
-                guard policy.enabled else { throw ModelError.disabled }
+                guard provider.isLocal ? policy.allowLocal : policy.enabled else { throw ModelError.disabled }
                 record(provider, request, usage: response.usage, since: start, outcome: "ok")
                 return response
             } catch {
+                if error is CancellationError || Task.isCancelled { throw CancellationError() }
                 record(provider, request, usage: nil, since: start, outcome: Self.outcome(error))
                 lastError = error
                 if let budgetFailure { throw budgetFailure }
@@ -203,17 +259,21 @@ public actor ModelGateway {
     }
 
     private func withTimeout<T: Sendable>(_ seconds: TimeInterval, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await work() }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(max(0.001, seconds) * 1_000_000_000))
-                throw ModelError.timeout
+        let race = GatewayRace<T>()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                race.install(continuation)
+                let worker = Task { do { race.finish(.success(try await work())) } catch { race.finish(.failure(error)) } }
+                let timer = Task {
+                    do { try await Task.sleep(for: .seconds(max(0.001, min(seconds, 300)))) }
+                    catch { return }
+                    race.finish(.failure(ModelError.timeout))
+                }
+                race.tasks([worker, timer])
             }
-            defer { group.cancelAll() }
-            guard let first = try await group.next() else { throw ModelError.timeout }
-            return first
-        }
+        } onCancel: { race.finish(.failure(CancellationError())) }
     }
+
 }
 
 // MARK: - Anthropic (fournisseur réel)
@@ -315,5 +375,28 @@ enum PromptRedactor {
             out = out.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
         }
         return out
+    }
+}
+
+/// A late result is discarded; cancellation never waits for an uncooperative SDK call.
+private final class GatewayRace<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+    private var result: Result<T, Error>?
+    private var running: [Task<Void, Never>] = []
+    func install(_ c: CheckedContinuation<T, Error>) {
+        let ready = lock.withLock { () -> Result<T, Error>? in if let result { return result }; continuation = c; return nil }
+        if let ready { c.resume(with: ready) }
+    }
+    func tasks(_ tasks: [Task<Void, Never>]) {
+        let done = lock.withLock { () -> Bool in if result != nil { return true }; running = tasks; return false }
+        if done { tasks.forEach { $0.cancel() } }
+    }
+    func finish(_ value: Result<T, Error>) {
+        let pending = lock.withLock { () -> (CheckedContinuation<T, Error>?, [Task<Void, Never>])? in
+            guard result == nil else { return nil }
+            result = value; let c = continuation; continuation = nil; let tasks = running; running = []; return (c, tasks)
+        }
+        guard let pending else { return }; pending.0?.resume(with: value); pending.1.forEach { $0.cancel() }
     }
 }

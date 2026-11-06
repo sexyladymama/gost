@@ -46,3 +46,11 @@
 La phase A ne constitue pas une validation de l'agent. Les phases B à G doivent implémenter et tester les capacités puis distinguer explicitement essais simulés, modèle réel, services externes et parcours UI manuel.
 
 Sources primaires consultées pour la compatibilité : [API et modèles Anthropic](https://platform.claude.com/docs/en/models/overview), [Foundation Models Apple](https://developer.apple.com/documentation/FoundationModels/generating-content-and-performing-tasks-with-foundation-models).
+
+## Phase B : passerelle commune
+
+`ModelProvider` déclare sa localisation, sa disponibilité et les capacités réellement exposées par l'adaptateur. `structuredProtocol` et `multiTurnProtocol` désignent une compatibilité JSON et retour de résultats gérée par GHOST, pas un appel d'outil natif du fournisseur. Les requêtes choisissent local uniquement, externe uniquement ou local avec repli autorisé. Les modèles simulés restent identifiés dans les réponses.
+
+`OnDeviceModelProvider` adapte FoundationModels à `ModelGateway`. Mind peut utiliser les adaptateurs local/externe de cette même passerelle ; le raccordement dans la composition sera effectué avec Core. Les limites de taille, l'annulation avant repli et un délai qui n'attend pas un SDK non coopératif sont testés. La réponse tardive d'un fournisseur est abandonnée.
+
+Validation de cette phase : 17 tests de passerelle exécutés sans échec (`swift test --package-path Packages/GhostKit --filter 'SharedGatewayTests|ModelGatewayTests'`). Cela ne valide pas encore un appel au modèle réel.
