@@ -8,6 +8,7 @@ import GhostAutonomy
 import GhostVision
 import GhostMind
 import GhostCore
+import GhostLocalLLM
 import CoreGraphics
 
 /// Configure et pilote les sources de perception depuis l'interface.
@@ -56,6 +57,12 @@ final class PerceptionController {
     @ObservationIgnored private var executionAccess: [String: [SecurityScopedFolder]] = [:]
     @ObservationIgnored private let gateway: ModelGateway
     let core: CoreCenter
+    /// L'IA propre de GHOST : un modèle ouvert exécuté sur ce Mac (aucune clé, aucun réseau pour raisonner).
+    let localModel: LocalModelStore
+    @ObservationIgnored private let localProvider: LocalOpenModelProvider
+    enum LocalModelState: Equatable { case notInstalled, downloading(Double), verifying, ready, failed(String) }
+    private(set) var localModelState: LocalModelState = .notInstalled
+    @ObservationIgnored private var localDownload: Task<Void, Never>?
     /// Confidentialité des objectifs : modèle local uniquement, sauf choix explicite de l'utilisateur.
     var corePrivacy: ModelPrivacy = .localOnly {
         didSet { defaults.set(corePrivacy.rawValue, forKey: "core.privacy") }
@@ -103,7 +110,10 @@ final class PerceptionController {
         context = ContextCenter(engine: ContextEngine(profile: profile, trust: system.trust, persistent: persistent))
         defaults = persistent ? .standard : UserDefaults(suiteName: "ghost.preview") ?? .standard
         secrets = persistent ? KeychainSecretStore(profileID: profile.id) : InMemorySecretStore()
-        gateway = ModelGateway(providers: [OnDeviceModelProvider(), AnthropicProvider(http: system.http, secrets: secrets)], policy: GatewayPolicy(enabled: false),
+        localModel = LocalModelStore(baseDirectory: base.appendingPathComponent("GHOST", isDirectory: true))
+        localProvider = LocalOpenModelProvider(store: localModel)
+        localModelState = localModel.isInstalled ? .ready : .notInstalled
+        gateway = ModelGateway(providers: [localProvider, OnDeviceModelProvider(), AnthropicProvider(http: system.http, secrets: secrets)], policy: Self.gatewayPolicy(enabled: false),
                                usageURL: persistent ? profile.directory.appendingPathComponent("model-usage.json") : nil)
         brain = BrainCenter(engine: BrainEngine(profile: profile, context: context.engine, trust: system.trust,
                                                 gateway: gateway, persistent: persistent))
@@ -116,7 +126,7 @@ final class PerceptionController {
         // Intelligence qui rédige : le modèle intégré à macOS d'abord (sur le Mac), le modèle externe seulement s'il est activé.
         let firstName = NSFullUserName().split(separator: " ").first.map(String.init) ?? NSUserName()
         mind = MindCenter(engine: MindEngine(profile: profile, brain: brain.engine, context: context.engine, trust: system.trust,
-                                             models: [OnDeviceLanguageModel(), GatewayLanguageModel(gateway: gateway)],
+                                             models: [GatewayLanguageModel(gateway: gateway, localOnly: true), OnDeviceLanguageModel(), GatewayLanguageModel(gateway: gateway)],
                                              sender: AppleMailSender(), userName: firstName,
                                              searcher: MapKitPlaceSearcher(), webSearcher: DuckDuckGoSearcher(), output: outputWriter,
                                              homeArea: { [defaults] in defaults.string(forKey: "mind.homeArea") },
@@ -531,7 +541,7 @@ final class PerceptionController {
         let granted = await system.trust.isAuthorized(PerceptionSystem.brainSourceID, .callExternalModel)
         let enabled = externalModelEnabled && granted && hasModelKey
         externalModelEnabled = enabled
-        await gateway.setPolicy(GatewayPolicy(enabled: enabled))
+        await gateway.setPolicy(Self.gatewayPolicy(enabled: enabled))
     }
 
     /// Active ou coupe l'envoi de données **masquées** à un modèle externe (Anthropic).
@@ -544,7 +554,7 @@ final class PerceptionController {
         }
         externalModelEnabled = enabled
         defaults.set(enabled, forKey: Keys.externalModel)
-        await gateway.setPolicy(GatewayPolicy(enabled: enabled))
+        await gateway.setPolicy(Self.gatewayPolicy(enabled: enabled))
     }
 
     func saveModelKey(_ key: String) {
@@ -558,6 +568,29 @@ final class PerceptionController {
         try? secrets.delete(AnthropicProvider.secretKey)
         hasModelKey = false
         await setExternalModel(enabled: false)
+    }
+
+    /// Un modèle de 7 milliards de paramètres répond en plusieurs dizaines de secondes : délai large, IA de GHOST préférée.
+    static func gatewayPolicy(enabled: Bool) -> GatewayPolicy { GatewayPolicy(enabled: enabled, timeout: 180, preferredProvider: "ghost-local") }
+
+    func downloadLocalModel() {
+        guard localDownload == nil, !localModel.isInstalled else { return }
+        localModelState = .downloading(0)
+        localDownload = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.localModel.download { value in Task { @MainActor in self.localModelState = value >= 1 ? .verifying : .downloading(value) } }
+                self.localModelState = .ready
+            } catch is CancellationError { self.localModelState = .notInstalled }
+            catch { self.localModelState = .failed(error.localizedDescription) }
+            self.localDownload = nil
+            await self.refreshAIStatus()
+        }
+    }
+    func cancelLocalDownload() { localDownload?.cancel() }
+    func removeLocalModel() {
+        localProvider.unload(); localModel.remove(); localModelState = .notInstalled
+        Task { await refreshAIStatus() }
     }
 
     /// Vrai appel de test (déclenché par l'utilisateur) : un modèle, une question triviale, aucune donnée personnelle.

@@ -66,6 +66,8 @@
 		C00700000000000000000003 /* MindEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00700000000000000000013 /* MindEndToEndTests.swift */; };
 		C00700000000000000000021 /* GhostMind in Frameworks */ = {isa = PBXBuildFile; productRef = C00700000000000000000031 /* GhostMind */; };
 		C00700000000000000000022 /* GhostMind in Frameworks */ = {isa = PBXBuildFile; productRef = C00700000000000000000032 /* GhostMind */; };
+		C01100000000000000000011 /* GhostLocalLLM in Frameworks */ = {isa = PBXBuildFile; productRef = C01100000000000000000031 /* GhostLocalLLM */; };
+		C01100000000000000000012 /* GhostLocalLLM in Frameworks */ = {isa = PBXBuildFile; productRef = C01100000000000000000032 /* GhostLocalLLM */; };
 		C01000000000000000000011 /* GhostCore in Frameworks */ = {isa = PBXBuildFile; productRef = C01000000000000000000031 /* GhostCore */; };
 		C01000000000000000000012 /* GhostCore in Frameworks */ = {isa = PBXBuildFile; productRef = C01000000000000000000032 /* GhostCore */; };
 		C01000000000000000000001 /* ObjectivesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01000000000000000000021 /* ObjectivesView.swift */; };
@@ -142,6 +144,7 @@
 				C00600000000000000000021 /* GhostVision in Frameworks */,
 				C00700000000000000000021 /* GhostMind in Frameworks */,
 				C01000000000000000000011 /* GhostCore in Frameworks */,
+				C01100000000000000000011 /* GhostLocalLLM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,6 +160,7 @@
 				C00600000000000000000022 /* GhostVision in Frameworks */,
 				C00700000000000000000022 /* GhostMind in Frameworks */,
 				C01000000000000000000012 /* GhostCore in Frameworks */,
+				C01100000000000000000012 /* GhostLocalLLM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -332,6 +336,7 @@
 				C00600000000000000000031 /* GhostVision */,
 				C00700000000000000000031 /* GhostMind */,
 				C01000000000000000000031 /* GhostCore */,
+				C01100000000000000000031 /* GhostLocalLLM */,
 			);
 			productName = GhostShell;
 			productReference = 996AD237BC284D463E664FFE /* GhostShell.app */;
@@ -359,6 +364,7 @@
 				C00600000000000000000032 /* GhostVision */,
 				C00700000000000000000032 /* GhostMind */,
 				C01000000000000000000032 /* GhostCore */,
+				C01100000000000000000032 /* GhostLocalLLM */,
 			);
 			productName = GhostShellTests;
 			productReference = 50ED88076C07C90FF1B1A76B /* GhostShellTests.xctest */;
@@ -393,6 +399,7 @@
 			mainGroup = 2B731CEFC6751AAE0EC69B98;
 			packageReferences = (
 				715E1E3F015A64BA0327CAEF /* XCLocalSwiftPackageReference "Packages/GhostKit" */,
+				C01100000000000000000041 /* XCLocalSwiftPackageReference "Packages/GhostLocalLLM" */,
 			);
 			productRefGroup = 113236722DEE1DC96F378B9D /* Products */;
 			projectDirPath = "";
@@ -698,6 +705,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/GhostKit;
 		};
+		C01100000000000000000041 /* XCLocalSwiftPackageReference "Packages/GhostLocalLLM" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/GhostLocalLLM;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -741,6 +752,8 @@
 		C00700000000000000000032 = {isa = XCSwiftPackageProductDependency; productName = GhostMind; };
 		C01000000000000000000031 = {isa = XCSwiftPackageProductDependency; productName = GhostCore; };
 		C01000000000000000000032 = {isa = XCSwiftPackageProductDependency; productName = GhostCore; };
+		C01100000000000000000031 = {isa = XCSwiftPackageProductDependency; package = C01100000000000000000041 /* XCLocalSwiftPackageReference "Packages/GhostLocalLLM" */; productName = GhostLocalLLM; };
+		C01100000000000000000032 = {isa = XCSwiftPackageProductDependency; package = C01100000000000000000041 /* XCLocalSwiftPackageReference "Packages/GhostLocalLLM" */; productName = GhostLocalLLM; };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;

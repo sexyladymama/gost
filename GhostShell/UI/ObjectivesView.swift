@@ -3,6 +3,7 @@ import GhostKit
 import GhostBrain
 import GhostContext
 import GhostCore
+import GhostLocalLLM
 
 /// Objectifs en langage naturel : GHOST comprend, planifie, choisit ses outils, vous demande votre accord pour ce qui engage, et vérifie.
 struct ObjectivesView: View {
@@ -43,9 +44,36 @@ struct ObjectivesView: View {
         .task { await center.reload(); await perception.refreshAIStatus() }
     }
 
+    private var localModelBox: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("IA de GHOST (Qwen 2.5 7B, tourne sur ce Mac)").font(.subheadline.weight(.semibold))
+            switch perception.localModelState {
+            case .notInstalled:
+                Text("Une IA ouverte, indépendante : aucune clé, aucun compte, aucune donnée envoyée. Téléchargement unique de \(String(format: "%.1f", Double(LocalModelStore.totalBytes) / 1e9)) Go depuis Hugging Face (licence Apache-2.0), vérifié par empreinte.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Télécharger l'IA de GHOST") { perception.downloadLocalModel() }.buttonStyle(GhostButtonStyle())
+            case .downloading(let value):
+                ProgressView(value: value) { Text("Téléchargement… \(Int(value * 100)) %").font(.caption) }
+                Button("Annuler") { perception.cancelLocalDownload() }.buttonStyle(GhostButtonStyle())
+            case .verifying:
+                ProgressView { Text("Vérification de l'intégrité…").font(.caption) }
+            case .ready:
+                HStack {
+                    Label("Installée et vérifiée", systemImage: "checkmark.seal").font(.caption).foregroundStyle(.green)
+                    Button("Supprimer") { perception.removeLocalModel() }.buttonStyle(GhostButtonStyle())
+                }
+            case .failed(let message):
+                Label(message, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                Button("Réessayer") { perception.downloadLocalModel() }.buttonStyle(GhostButtonStyle())
+            }
+        }
+        .padding(12).ghostGlass(cornerRadius: 12)
+    }
+
     private var aiStatus: some View {
         @Bindable var perception = perception
         return VStack(alignment: .leading, spacing: 6) {
+            localModelBox
             ForEach(perception.aiStatus, id: \.self) { Label($0, systemImage: "cpu").font(.caption).foregroundStyle(.secondary) }
             Picker("Modèle utilisé pour les objectifs", selection: $perception.corePrivacy) {
                 Text("Local uniquement").tag(ModelPrivacy.localOnly)
